@@ -1,0 +1,2161 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Horror 2D v0.8.2</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#000; font-family:sans-serif; color:#fff; }
+  #game { position:fixed; inset:0; display:block; }
+
+  #startScreen {
+    position:fixed; inset:0; z-index:100;
+    background:radial-gradient(ellipse at center, #1a0505 0%, #000 80%);
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    padding:20px;
+  }
+  #startScreen.hidden { display:none; }
+
+  #startTitle {
+    font-size:42px; font-weight:bold;
+    color:#cc2222; text-shadow:0 0 20px #ff0000, 3px 3px 6px #000;
+    letter-spacing:3px; margin-bottom:10px;
+    animation:pulseTitle 2s infinite alternate;
+  }
+  @keyframes pulseTitle {
+    from { text-shadow:0 0 15px #ff0000, 3px 3px 6px #000; }
+    to   { text-shadow:0 0 30px #ff0000, 3px 3px 6px #000; }
+  }
+
+  #startSubtitle {
+    font-size:14px; color:#aa8888; letter-spacing:2px;
+    margin-bottom:40px; text-align:center;
+  }
+
+  .startBtn {
+    padding:16px 40px; margin:8px;
+    background:rgba(80,20,20,0.8); color:#fff;
+    border:2px solid #cc2222; border-radius:10px;
+    font-size:18px; font-weight:bold; letter-spacing:2px;
+    cursor:pointer; transition:all 0.2s;
+    min-width:220px;
+    font-family:sans-serif;
+  }
+  .startBtn:active { transform:scale(0.95); }
+  .startBtn:hover { background:rgba(150,30,30,0.9); }
+
+  #audioToggle {
+    position:absolute; top:15px; right:15px;
+    padding:8px 14px; border-radius:8px;
+    background:rgba(0,0,0,0.5); color:#fff;
+    border:1px solid #666; font-size:14px;
+    cursor:pointer; font-family:sans-serif;
+  }
+
+  .endScreen {
+    position:fixed; inset:0; z-index:100;
+    display:none; flex-direction:column;
+    align-items:center; justify-content:center;
+    padding:20px;
+    backdrop-filter:blur(4px);
+  }
+  .endScreen.show { display:flex; }
+
+  #winScreen { background:radial-gradient(ellipse at center, rgba(255,200,80,0.4) 0%, rgba(0,0,0,0.95) 80%); }
+  #loseScreen { background:radial-gradient(ellipse at center, rgba(120,0,0,0.6) 0%, rgba(0,0,0,0.95) 80%); }
+
+  .endTitle {
+    font-size:36px; font-weight:bold; letter-spacing:3px;
+    margin-bottom:20px; text-align:center;
+  }
+  #winScreen .endTitle { color:#ffcc44; text-shadow:0 0 20px #ffaa00; }
+  #loseScreen .endTitle { color:#ff3333; text-shadow:0 0 20px #ff0000; }
+
+  .endInfo {
+    font-size:16px; color:#ccc; margin:6px 0;
+    letter-spacing:1px;
+  }
+  .endInfo strong { color:#fff; }
+
+  .endBtn {
+    padding:14px 36px; margin-top:30px;
+    background:rgba(80,20,20,0.8); color:#fff;
+    border:2px solid #cc2222; border-radius:10px;
+    font-size:16px; font-weight:bold; letter-spacing:2px;
+    cursor:pointer; font-family:sans-serif;
+  }
+  .endBtn:active { transform:scale(0.95); }
+
+  #joyBase {
+    position:fixed; left:20px; bottom:20px;
+    width:120px; height:120px; border-radius:50%;
+    background:rgba(255,255,255,0.15); border:2px solid rgba(255,255,255,0.35);
+    touch-action:none; z-index:10;
+  }
+  #joyKnob {
+    position:absolute; left:50%; top:50%;
+    width:50px; height:50px; border-radius:50%;
+    background:rgba(255,255,255,0.6); border:2px solid #fff;
+    transform:translate(-50%,-50%);
+    pointer-events:none;
+  }
+
+  #inventory {
+    position:fixed; right:15px; bottom:15px;
+    display:flex; gap:8px; z-index:10;
+  }
+  .invSlot {
+    width:56px; height:56px; border-radius:8px;
+    background:rgba(0,0,0,0.5); border:2px solid rgba(255,255,255,0.3);
+    display:flex; align-items:center; justify-content:center;
+    font-size:28px; color:#fff;
+    transition:all 0.15s;
+  }
+  .invSlot.active {
+    background:rgba(255,220,100,0.35);
+    border-color:#ffdd66;
+    box-shadow:0 0 12px rgba(255,220,100,0.7);
+  }
+  .invSlot.empty { display:none; }
+
+  #hud {
+    position:fixed; top:10px; left:10px; color:#fff;
+    font-size:12px; text-shadow:1px 1px 2px #000; z-index:10;
+    background:rgba(0,0,0,0.4); padding:6px 10px; border-radius:6px;
+    line-height:1.4;
+  }
+
+  #clock {
+    position:fixed; top:10px; left:50%;
+    transform:translateX(-50%);
+    color:#fff; font-size:20px; font-weight:bold;
+    text-shadow:0 0 8px #ffaa00, 1px 1px 2px #000;
+    z-index:10; background:rgba(0,0,0,0.5);
+    padding:6px 16px; border-radius:8px;
+    letter-spacing:2px; font-family:monospace;
+    border:1px solid rgba(255,170,0,0.3);
+  }
+  #clock.near-dawn {
+    color:#ffdd66;
+    text-shadow:0 0 15px #ffaa00, 0 0 30px #ff8800, 1px 1px 2px #000;
+    animation:clockGlow 1s infinite alternate;
+  }
+  @keyframes clockGlow {
+    from { box-shadow:0 0 8px rgba(255,170,0,0.4); }
+    to   { box-shadow:0 0 20px rgba(255,170,0,0.8); }
+  }
+
+  #powerAlert {
+    position:fixed; top:52px; left:50%;
+    transform:translateX(-50%);
+    color:#ff4444; font-size:14px; font-weight:bold;
+    text-shadow:0 0 8px #ff0000, 1px 1px 2px #000;
+    z-index:10; display:none;
+    letter-spacing:1px;
+    background:rgba(0,0,0,0.5); padding:5px 10px; border-radius:6px;
+    animation:blink 0.8s infinite alternate;
+  }
+  #powerAlert.show { display:block; }
+  @keyframes blink {
+    from { opacity:1; }
+    to { opacity:0.35; }
+  }
+
+  #pickupBtn {
+    position:fixed; right:15px; top:50%;
+    transform:translateY(-50%);
+    padding:12px 18px; border-radius:8px;
+    background:rgba(255,220,100,0.85); color:#000;
+    font-weight:bold; font-size:14px;
+    display:none; z-index:10;
+    border:none;
+  }
+  #pickupBtn.show { display:block; }
+
+  #doorBtn, #breakerBtn {
+    position:fixed; z-index:10;
+    padding:8px 14px; border-radius:6px;
+    background:rgba(120,200,255,0.9); color:#000;
+    font-weight:bold; font-size:13px;
+    display:none; border:none;
+    transform:translate(-50%,-140%);
+    white-space:nowrap;
+  }
+  #doorBtn.show, #breakerBtn.show { display:block; }
+  #breakerBtn { background:rgba(255,180,80,0.95); }
+
+  #deathFlash {
+    position:fixed; inset:0;
+    background:#aa0000;
+    opacity:0; pointer-events:none;
+    z-index:50; transition:opacity 0.15s;
+  }
+  #deathFlash.show { opacity:0.85; }
+
+  #heartbeat {
+    position:fixed; inset:0; pointer-events:none;
+    z-index:40; display:none;
+    box-shadow:inset 0 0 100px rgba(255,0,0,0.6), inset 0 0 200px rgba(255,0,0,0.3);
+    animation:heartbeatPulse 0.6s infinite;
+  }
+  #heartbeat.show { display:block; }
+  @keyframes heartbeatPulse {
+    0%, 100% { opacity:0.3; }
+    50%      { opacity:0.8; }
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">v0.8.2<br><span id="posInfo">...</span></div>
+<div id="clock">00:00</div>
+<div id="powerAlert">⚠️ MẤT ĐIỆN</div>
+
+<div id="joyBase"><div id="joyKnob"></div></div>
+<div id="inventory">
+  <div class="invSlot empty" data-slot="flashlight">🔦</div>
+  <div class="invSlot empty" data-slot="key">🔑</div>
+</div>
+<button id="pickupBtn">NHẶT</button>
+<button id="doorBtn">KHÓA</button>
+<button id="breakerBtn">TẮT ĐIỆN</button>
+
+<div id="heartbeat"></div>
+<div id="deathFlash"></div>
+
+<div id="startScreen">
+  <div id="startTitle">HORROR 2D</div>
+  <div id="startSubtitle">SỐNG SÓT ĐẾN 7H SÁNG</div>
+  <button class="startBtn" id="btnStart">▶ BẮT ĐẦU</button>
+  <button id="audioToggle">🔊 ÂM THANH: BẬT</button>
+</div>
+
+<div id="winScreen" class="endScreen">
+  <div class="endTitle">🌅 BẠN ĐÃ SỐNG SÓT</div>
+  <div class="endInfo">Thời gian sống: <strong>07:00</strong></div>
+  <div class="endInfo">Số lần suýt chết: <strong id="winNearMisses">0</strong></div>
+  <button class="endBtn" id="btnWinReplay">🔄 CHƠI LẠI</button>
+</div>
+
+<div id="loseScreen" class="endScreen">
+  <div class="endTitle">💀 BẠN ĐÃ CHẾT</div>
+  <div class="endInfo">Thời gian sống: <strong id="loseTime">00:00</strong></div>
+  <div class="endInfo">Số lần suýt chết: <strong id="loseNearMisses">0</strong></div>
+  <button class="endBtn" id="btnLoseReplay">🔄 CHƠI LẠI</button>
+</div>
+
+<script>
+// ==================== CANVAS ====================
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+
+function resize() {
+  DPR = Math.min(devicePixelRatio, 2);
+  W = innerWidth;
+  H = innerHeight;
+  canvas.width = W * DPR;
+  canvas.height = H * DPR;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+addEventListener('resize', resize);
+resize();
+
+// ==================== GAME STATE ====================
+const gameState = {
+  started: false,
+  ended: false,
+  gameTime: 0,              // đơn vị: PHÚT game (0 → 420 = 7 giờ)
+  gameDuration: 7 * 60,     // 7 giờ = 420 phút game = 7 phút thật
+  nearMisses: 0,
+  nearMissCooldown: 0,
+  audioEnabled: true,
+};
+
+// ==================== AUDIO ====================
+const audio = {
+  ctx: null,
+  masterGain: null,
+  windOsc: null,
+  windGain: null,
+  heartbeatTimer: 0,
+  heartbeatRate: 0,
+};
+
+function initAudio() {
+  if (audio.ctx) return;
+  try {
+    audio.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    audio.masterGain = audio.ctx.createGain();
+    audio.masterGain.gain.value = 0.3;
+    audio.masterGain.connect(audio.ctx.destination);
+
+    const windOsc = audio.ctx.createOscillator();
+    windOsc.type = 'sine';
+    windOsc.frequency.value = 60;
+    const windGain = audio.ctx.createGain();
+    windGain.gain.value = 0.08;
+    windOsc.connect(windGain);
+    windGain.connect(audio.masterGain);
+    windOsc.start();
+
+    audio.windOsc = windOsc;
+    audio.windGain = windGain;
+  } catch (e) {
+    console.warn('Audio init failed:', e);
+  }
+}
+
+function playBeep(freq, duration, type = 'sine', volume = 0.2) {
+  if (!gameState.audioEnabled || !audio.ctx) return;
+  try {
+    const osc = audio.ctx.createOscillator();
+    const gain = audio.ctx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(volume, audio.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audio.ctx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(audio.masterGain);
+    osc.start();
+    osc.stop(audio.ctx.currentTime + duration);
+  } catch (e) {}
+}
+
+function playHeartbeat() {
+  if (!gameState.audioEnabled || !audio.ctx) return;
+  playBeep(80, 0.12, 'sine', 0.35);
+  setTimeout(() => playBeep(70, 0.15, 'sine', 0.3), 150);
+}
+
+function playDeath() {
+  if (!gameState.audioEnabled || !audio.ctx) return;
+  try {
+    const osc = audio.ctx.createOscillator();
+    const gain = audio.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(200, audio.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(40, audio.ctx.currentTime + 1.5);
+    gain.gain.setValueAtTime(0.4, audio.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audio.ctx.currentTime + 1.5);
+    osc.connect(gain);
+    gain.connect(audio.masterGain);
+    osc.start();
+    osc.stop(audio.ctx.currentTime + 1.5);
+  } catch (e) {}
+}
+
+function playVictory() {
+  if (!gameState.audioEnabled || !audio.ctx) return;
+  const notes = [523, 659, 784];
+  notes.forEach((f, i) => {
+    setTimeout(() => playBeep(f, 0.4, 'triangle', 0.25), i * 200);
+  });
+}
+
+function playClick() { playBeep(1200, 0.05, 'square', 0.15); }
+function playPickup() { playBeep(1500, 0.1, 'sine', 0.2); }
+function playDoorLock() { playBeep(800, 0.08, 'square', 0.15); }
+function playBreaker() { playBeep(600, 0.1, 'square', 0.2); }
+
+// ==================== START/END SCREEN ====================
+const startScreen = document.getElementById('startScreen');
+const winScreen = document.getElementById('winScreen');
+const loseScreen = document.getElementById('loseScreen');
+const btnStart = document.getElementById('btnStart');
+const btnWinReplay = document.getElementById('btnWinReplay');
+const btnLoseReplay = document.getElementById('btnLoseReplay');
+const audioToggle = document.getElementById('audioToggle');
+
+function startGame(e) {
+  if (e) e.preventDefault();
+  initAudio();
+  if (audio.ctx && audio.ctx.state === 'suspended') {
+    audio.ctx.resume();
+  }
+  gameState.started = true;
+  gameState.ended = false;
+  gameState.gameTime = 0;
+  gameState.nearMisses = 0;
+  startScreen.classList.add('hidden');
+  winScreen.classList.remove('show');
+  loseScreen.classList.remove('show');
+  if (typeof resetGame === 'function') resetGame();
+}
+
+btnStart.addEventListener('touchstart', startGame);
+btnStart.addEventListener('click', startGame);
+btnWinReplay.addEventListener('touchstart', startGame);
+btnWinReplay.addEventListener('click', startGame);
+btnLoseReplay.addEventListener('touchstart', startGame);
+btnLoseReplay.addEventListener('click', startGame);
+
+function toggleAudio(e) {
+  e.preventDefault();
+  gameState.audioEnabled = !gameState.audioEnabled;
+  audioToggle.textContent = gameState.audioEnabled ? '🔊 ÂM THANH: BẬT' : '🔇 ÂM THANH: TẮT';
+  if (audio.masterGain) {
+    audio.masterGain.gain.value = gameState.audioEnabled ? 0.3 : 0;
+  }
+}
+audioToggle.addEventListener('touchstart', toggleAudio);
+audioToggle.addEventListener('click', toggleAudio);
+
+[startScreen, winScreen, loseScreen].forEach(el => {
+  el.addEventListener('touchmove', e => e.preventDefault(), { passive:false });
+});
+// ==================== MAP ====================
+const TILE = 32;
+const MAP_W = 60;
+const MAP_H = 50;
+const WORLD_W = MAP_W * TILE;
+const WORLD_H = MAP_H * TILE;
+
+// -------- NHÀ --------
+const HOUSE = {
+  x: Math.floor(MAP_W / 2) - 5,
+  y: Math.floor(MAP_H / 2) - 4,
+  w: 10,
+  h: 8,
+};
+const MID_Y = HOUSE.y + Math.floor(HOUSE.h / 2);
+const DOOR_MID_X = HOUSE.x + 3;
+const DOOR_MAIN_X = HOUSE.x + 6;
+
+const doorMid = {
+  gx: DOOR_MID_X,
+  gy: MID_Y,
+  locked: false,
+};
+
+// -------- CHỒI (phía Nam) --------
+const SHED = { w: 3, h: 3 };
+let shedX = 0, shedY = 0;
+{
+  const gap = 5;
+  const houseCx = HOUSE.x + HOUSE.w / 2;
+  shedX = Math.round(houseCx - SHED.w / 2);
+  shedY = HOUSE.y + HOUSE.h + gap;
+  shedX = Math.max(2, Math.min(MAP_W - SHED.w - 2, shedX));
+  shedY = Math.max(2, Math.min(MAP_H - SHED.h - 2, shedY));
+}
+const shedDoor = { gx: shedX + 1, gy: shedY };
+
+const breaker = {
+  gx: shedX + 1,
+  gy: shedY + 1,
+  on: true,
+};
+
+const power = {
+  on: true,
+  flicker: 0,
+  flickerTimer: 0,
+  dimFactor: 1.0,
+  targetDim: 1.0,
+};
+
+// -------- AI CONSTANTS --------
+const KILLER_AI = {
+  investigateInterval: 30000,
+  investigateChance: 0.30,
+  sabotageChance: 0.20,
+  checkRoomDuration: 3000,
+  doorWaitDuration: 2000,
+  giveUpDuration: 5000,
+};
+
+// -------- WAYPOINTS --------
+const WAYPOINTS = {
+  room1:      { gx: HOUSE.x + 5, gy: HOUSE.y + 4 },   // FIX: dưới bàn, không bị chặn
+  room2:      { gx: HOUSE.x + 5, gy: HOUSE.y + 6 },
+  doorIn:     { gx: DOOR_MAIN_X, gy: HOUSE.y + 1 },
+  doorMidIn:  { gx: DOOR_MID_X,  gy: MID_Y + 1 },
+  breaker:    { gx: breaker.gx,  gy: breaker.gy },
+};
+
+// -------- WALL --------
+function isHouseWall(gx, gy) {
+  if (gx < HOUSE.x || gx >= HOUSE.x + HOUSE.w) return false;
+  if (gy < HOUSE.y || gy >= HOUSE.y + HOUSE.h) return false;
+  const isLeft   = gx === HOUSE.x;
+  const isRight  = gx === HOUSE.x + HOUSE.w - 1;
+  const isTop    = gy === HOUSE.y;
+  const isBottom = gy === HOUSE.y + HOUSE.h - 1;
+  if (isLeft || isRight || isTop || isBottom) {
+    if (isTop && gx === DOOR_MAIN_X) return false;
+    return true;
+  }
+  if (gy === MID_Y) {
+    if (gx === DOOR_MID_X) return doorMid.locked;
+    return true;
+  }
+  return false;
+}
+
+function isShedWall(gx, gy) {
+  if (gx < shedX || gx >= shedX + SHED.w) return false;
+  if (gy < shedY || gy >= shedY + SHED.h) return false;
+  const isLeft   = gx === shedX;
+  const isRight  = gx === shedX + SHED.w - 1;
+  const isTop    = gy === shedY;
+  const isBottom = gy === shedY + SHED.h - 1;
+  if (isLeft || isRight || isTop || isBottom) {
+    if (gx === shedDoor.gx && gy === shedDoor.gy) return false;
+    return true;
+  }
+  return false;
+}
+
+function isWall(gx, gy) {
+  return isHouseWall(gx, gy) || isShedWall(gx, gy);
+}
+
+function isFloor(gx, gy) {
+  if (gx >= HOUSE.x && gx < HOUSE.x + HOUSE.w &&
+      gy >= HOUSE.y && gy < HOUSE.y + HOUSE.h &&
+      !isHouseWall(gx, gy)) return true;
+  if (gx >= shedX && gx < shedX + SHED.w &&
+      gy >= shedY && gy < shedY + SHED.h &&
+      !isShedWall(gx, gy)) return true;
+  return false;
+}
+
+function isInsideHouse(gx, gy) {
+  return gx >= HOUSE.x && gx < HOUSE.x + HOUSE.w &&
+         gy >= HOUSE.y && gy < HOUSE.y + HOUSE.h;
+}
+
+function isInsideShed(gx, gy) {
+  return gx >= shedX && gx < shedX + SHED.w &&
+         gy >= shedY && gy < shedY + SHED.h;
+}
+
+const furniture = [
+  { gx: HOUSE.x + 4, gy: HOUSE.y + 2, gw: 3, gh: 1, type: 'table', solid: true },
+  { gx: HOUSE.x + 3, gy: HOUSE.y + 2, gw: 1, gh: 1, type: 'chair', solid: true },
+  { gx: HOUSE.x + 7, gy: HOUSE.y + 2, gw: 1, gh: 1, type: 'chair', solid: true },
+  { gx: HOUSE.x + 6, gy: HOUSE.y + 6, gw: 2, gh: 1, type: 'table', solid: true },
+];
+
+function isFurniture(gx, gy) {
+  for (const f of furniture) {
+    if (!f.solid) continue;
+    if (gx >= f.gx && gx < f.gx + f.gw &&
+        gy >= f.gy && gy < f.gy + f.gh) return true;
+  }
+  return false;
+}
+
+const lights = [
+  { x: (HOUSE.x + HOUSE.w / 2) * TILE,
+    y: (HOUSE.y + MID_Y) / 2 * TILE + TILE / 2,
+    radius: 180, intensity: 0.55 },
+  { x: (HOUSE.x + HOUSE.w / 2) * TILE,
+    y: (MID_Y + HOUSE.y + HOUSE.h) / 2 * TILE + TILE / 2,
+    radius: 180, intensity: 0.55 },
+];
+
+const ITEMS = [
+  {
+    id: 'flashlight', icon: '🔦',
+    x: (HOUSE.x + 5) * TILE + TILE / 2,
+    y: (HOUSE.y + 2) * TILE + TILE / 2,
+    picked: false, pickupRange: 1.3 * TILE,
+    spawnX: (HOUSE.x + 5) * TILE + TILE / 2,
+    spawnY: (HOUSE.y + 2) * TILE + TILE / 2,
+  },
+  {
+    id: 'key', icon: '🔑',
+    x: (HOUSE.x + 4) * TILE + TILE / 2,
+    y: (HOUSE.y + 2) * TILE + TILE / 2,
+    picked: false, pickupRange: 1.3 * TILE,
+    spawnX: (HOUSE.x + 4) * TILE + TILE / 2,
+    spawnY: (HOUSE.y + 2) * TILE + TILE / 2,
+  },
+];
+
+// ==================== MAP TILES ====================
+const tiles = [];
+for (let y = 0; y < MAP_H; y++) {
+  const row = [];
+  for (let x = 0; x < MAP_W; x++) {
+    let type = 'grass';
+    if (isFloor(x, y)) {
+      if (isInsideHouse(x, y)) type = (y <= MID_Y) ? 'floor1' : 'floor2';
+      else type = 'shedfloor';
+    }
+    row.push({ type, shade: Math.random() * 0.12 - 0.06 });
+  }
+  tiles.push(row);
+}
+
+// ==================== BACKGROUND ====================
+const bgCanvas = document.createElement('canvas');
+bgCanvas.width = WORLD_W;
+bgCanvas.height = WORLD_H;
+{
+  const bctx = bgCanvas.getContext('2d');
+  for (let y = 0; y < MAP_H; y++) {
+    for (let x = 0; x < MAP_W; x++) {
+      const t = tiles[y][x];
+      let base;
+      if (t.type === 'grass') base = [60, 120, 50];
+      else if (t.type === 'floor1') base = [120, 110, 100];
+      else if (t.type === 'floor2') base = [90, 82, 75];
+      else if (t.type === 'shedfloor') base = [80, 60, 45];
+      const s = t.shade * 255;
+      bctx.fillStyle = `rgb(${Math.max(0,Math.min(255,base[0]+s))|0},${Math.max(0,Math.min(255,base[1]+s))|0},${Math.max(0,Math.min(255,base[2]+s))|0})`;
+      bctx.fillRect(x * TILE, y * TILE, TILE, TILE);
+
+      if (t.type !== 'grass') {
+        bctx.strokeStyle = 'rgba(0,0,0,0.15)';
+        bctx.lineWidth = 1;
+        bctx.beginPath();
+        bctx.moveTo(x * TILE, y * TILE + TILE * 0.5);
+        bctx.lineTo(x * TILE + TILE, y * TILE + TILE * 0.5);
+        bctx.stroke();
+      } else {
+        bctx.fillStyle = 'rgba(0,0,0,0.08)';
+        for (let i = 0; i < 3; i++) {
+          bctx.fillRect(x * TILE + Math.random() * TILE, y * TILE + Math.random() * TILE, 1, 1);
+        }
+      }
+    }
+  }
+
+  for (let y = 0; y < MAP_H; y++) {
+    for (let x = 0; x < MAP_W; x++) {
+      if (!isHouseWall(x, y)) continue;
+      const px = x * TILE, py = y * TILE;
+      bctx.fillStyle = '#e8dca8';
+      bctx.fillRect(px, py, TILE, TILE);
+      bctx.strokeStyle = 'rgba(120,100,50,0.25)';
+      bctx.lineWidth = 1;
+      bctx.beginPath();
+      bctx.moveTo(px + TILE * 0.5, py);
+      bctx.lineTo(px + TILE * 0.5, py + TILE);
+      bctx.stroke();
+      bctx.strokeStyle = 'rgba(80,60,20,0.7)';
+      bctx.lineWidth = 2;
+      bctx.strokeRect(px + 1, py + 1, TILE - 2, TILE - 2);
+    }
+  }
+
+  for (let y = 0; y < MAP_H; y++) {
+    for (let x = 0; x < MAP_W; x++) {
+      if (!isShedWall(x, y)) continue;
+      const px = x * TILE, py = y * TILE;
+      bctx.fillStyle = '#4a3020';
+      bctx.fillRect(px, py, TILE, TILE);
+      bctx.strokeStyle = 'rgba(30,20,10,0.6)';
+      bctx.lineWidth = 1;
+      bctx.beginPath();
+      bctx.moveTo(px, py + TILE * 0.5);
+      bctx.lineTo(px + TILE, py + TILE * 0.5);
+      bctx.stroke();
+      bctx.strokeStyle = 'rgba(20,10,5,0.8)';
+      bctx.lineWidth = 2;
+      bctx.strokeRect(px + 1, py + 1, TILE - 2, TILE - 2);
+    }
+  }
+
+  {
+    const px = DOOR_MAIN_X * TILE, py = HOUSE.y * TILE;
+    bctx.fillStyle = '#5a3a1e';
+    bctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
+    bctx.fillStyle = '#8a5a2e';
+    bctx.fillRect(px + 5, py + 5, TILE - 10, TILE - 10);
+  }
+  {
+    const px = DOOR_MID_X * TILE, py = MID_Y * TILE;
+    bctx.fillStyle = '#5a3a1e';
+    bctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
+    bctx.fillStyle = '#8a5a2e';
+    bctx.fillRect(px + 5, py + 5, TILE - 10, TILE - 10);
+  }
+  {
+    const px = shedDoor.gx * TILE, py = shedDoor.gy * TILE;
+    bctx.fillStyle = '#3a2010';
+    bctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
+    bctx.fillStyle = '#5a3a20';
+    bctx.fillRect(px + 5, py + 5, TILE - 10, TILE - 10);
+  }
+
+  for (const f of furniture) {
+    const px = f.gx * TILE, py = f.gy * TILE;
+    const pw = f.gw * TILE, ph = f.gh * TILE;
+    if (f.type === 'table') {
+      bctx.fillStyle = '#6b4a2a';
+      bctx.fillRect(px + 3, py + 3, pw - 6, ph - 6);
+      bctx.fillStyle = '#8b6a3a';
+      bctx.fillRect(px + 5, py + 5, pw - 10, ph - 10);
+    } else if (f.type === 'chair') {
+      bctx.fillStyle = '#4a3a2a';
+      bctx.fillRect(px + 6, py + 6, TILE - 12, TILE - 12);
+      bctx.fillStyle = '#6a5a3a';
+      bctx.fillRect(px + 8, py + 8, TILE - 16, TILE - 16);
+    }
+  }
+}
+// ==================== PLAYER ====================
+const player = {
+  x: HOUSE.x * TILE + HOUSE.w * TILE / 2,
+  y: (HOUSE.y + 1.5) * TILE,
+  r: 12,
+  speed: 4.2,
+  dir: 0,
+  spawnX: HOUSE.x * TILE + HOUSE.w * TILE / 2,
+  spawnY: (HOUSE.y + 1.5) * TILE,
+};
+
+function findFreeSpot(px, py) {
+  const gx0 = Math.floor(px / TILE);
+  const gy0 = Math.floor(py / TILE);
+  for (let r = 0; r < 15; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const gx = gx0 + dx, gy = gy0 + dy;
+        if (gx < 0 || gx >= MAP_W || gy < 0 || gy >= MAP_H) continue;
+        if (isWall(gx, gy) || isFurniture(gx, gy)) continue;
+        return { x: gx * TILE + TILE / 2, y: gy * TILE + TILE / 2 };
+      }
+    }
+  }
+  return { x: px, y: py };
+}
+{
+  const s = findFreeSpot(player.x, player.y);
+  player.x = s.x;
+  player.y = s.y;
+  player.spawnX = s.x;
+  player.spawnY = s.y;
+}
+
+// ==================== KILLER ====================
+function pickKillerSpawn() {
+  const minDist = 15 * TILE;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const gx = 2 + Math.floor(Math.random() * (MAP_W - 4));
+    const gy = 2 + Math.floor(Math.random() * (MAP_H - 4));
+    if (isInsideHouse(gx, gy)) continue;
+    if (isInsideShed(gx, gy)) continue;
+    if (isWall(gx, gy)) continue;
+    if (isFurniture(gx, gy)) continue;
+    const wx = gx * TILE + TILE / 2;
+    const wy = gy * TILE + TILE / 2;
+    if (Math.hypot(wx - player.x, wy - player.y) < minDist) continue;
+    return { x: wx, y: wy };
+  }
+  return { x: 2 * TILE, y: 2 * TILE };
+}
+
+const killer = {
+  x: 0, y: 0,
+  r: 12,
+  wanderSpeed: 4.2 * 0.80,
+  chaseSpeed:  4.2 * 1.10,
+  dir: 0,
+
+  state: 'WANDER',
+  stateTimer: 0,
+  stateStep: 0,
+
+  target: { x: 0, y: 0 },
+  wanderTimer: 0,
+  lastSeen: 0,
+  spawnX: 0, spawnY: 0,
+  visionRange: 8 * TILE,
+  stuckTimer: 0,
+
+  path: [],
+  pathIndex: 0,
+  pathRecalcTimer: 0,
+
+  investigateTimer: 0,
+  doorWaitTimer: 0,
+  roomCheckTimer: 0,
+
+  debugPath: false,
+};
+
+{
+  const sp = pickKillerSpawn();
+  killer.x = sp.x; killer.y = sp.y;
+  killer.spawnX = sp.x; killer.spawnY = sp.y;
+  killer.target.x = sp.x;
+  killer.target.y = sp.y;
+  killer.investigateTimer = KILLER_AI.investigateInterval;
+}
+
+function pickWanderTarget() {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const gx = 2 + Math.floor(Math.random() * (MAP_W - 4));
+    const gy = 2 + Math.floor(Math.random() * (MAP_H - 4));
+    if (isInsideHouse(gx, gy)) continue;
+    if (isInsideShed(gx, gy)) continue;
+    if (isWall(gx, gy)) continue;
+    if (isFurniture(gx, gy)) continue;
+    return { x: gx * TILE + TILE / 2, y: gy * TILE + TILE / 2 };
+  }
+  return { x: killer.x, y: killer.y };
+}
+
+function setKillerState(newState, target = null) {
+  killer.state = newState;
+  killer.stateTimer = 0;
+  killer.stateStep = 0;
+  killer.path = [];
+  killer.pathIndex = 0;
+  killer.pathRecalcTimer = 0;
+  if (target) {
+    killer.target.x = target.x;
+    killer.target.y = target.y;
+  }
+}
+
+// ==================== INVENTORY ====================
+const inventory = {
+  flashlight: false,
+  key: false,
+  equipped: null,
+  flashlightOn: false,
+};
+
+function updateInventoryUI() {
+  const flashSlot = document.querySelector('.invSlot[data-slot="flashlight"]');
+  const keySlot   = document.querySelector('.invSlot[data-slot="key"]');
+  if (flashSlot) {
+    flashSlot.classList.toggle('empty', !inventory.flashlight);
+    flashSlot.classList.toggle('active',
+      inventory.equipped === 'flashlight' && inventory.flashlightOn);
+  }
+  if (keySlot) {
+    keySlot.classList.toggle('empty', !inventory.key);
+    keySlot.classList.toggle('active', inventory.equipped === 'key');
+  }
+}
+
+document.querySelectorAll('.invSlot').forEach(el => {
+  el.addEventListener('touchstart', (e) => {
+    const slot = el.dataset.slot;
+    if (slot === 'flashlight') {
+      if (!inventory.flashlight) { e.preventDefault(); return; }
+      if (inventory.equipped === 'flashlight' && inventory.flashlightOn) {
+        inventory.equipped = null;
+        inventory.flashlightOn = false;
+      } else {
+        inventory.equipped = 'flashlight';
+        inventory.flashlightOn = true;
+      }
+      playClick();
+      updateInventoryUI();
+    } else if (slot === 'key') {
+      if (!inventory.key) { e.preventDefault(); return; }
+      if (inventory.equipped === 'key') {
+        inventory.equipped = null;
+      } else {
+        inventory.equipped = 'key';
+        inventory.flashlightOn = false;
+      }
+      playClick();
+      updateInventoryUI();
+    }
+    e.preventDefault();
+  }, { passive:false });
+});
+
+// ==================== PICKUP ====================
+const pickupBtn = document.getElementById('pickupBtn');
+let nearestItem = null;
+
+pickupBtn.addEventListener('touchstart', (e) => {
+  if (nearestItem && !nearestItem.picked) {
+    nearestItem.picked = true;
+    if (nearestItem.id === 'flashlight') inventory.flashlight = true;
+    if (nearestItem.id === 'key') inventory.key = true;
+    playPickup();
+    updateInventoryUI();
+  }
+  e.preventDefault();
+}, { passive:false });
+
+// ==================== DOOR BUTTON ====================
+const doorBtn = document.getElementById('doorBtn');
+let doorInRange = false;
+
+doorBtn.addEventListener('touchstart', (e) => {
+  if (!doorInRange) return;
+  doorMid.locked = !doorMid.locked;
+  playDoorLock();
+  updateInventoryUI();
+  e.preventDefault();
+}, { passive:false });
+
+// ==================== BREAKER BUTTON ====================
+const breakerBtn = document.getElementById('breakerBtn');
+const powerAlert = document.getElementById('powerAlert');
+let breakerInRange = false;
+
+breakerBtn.addEventListener('touchstart', (e) => {
+  if (!breakerInRange) return;
+  breaker.on = !breaker.on;
+  playBreaker();
+  if (breaker.on) {
+    power.flicker = 1 + Math.floor(Math.random() * 3);
+    power.flickerTimer = 0;
+    power.targetDim = 1.0;
+    powerAlert.classList.remove('show');
+  } else {
+    power.targetDim = 0;
+    power.flicker = 0;
+    powerAlert.classList.add('show');
+  }
+  e.preventDefault();
+}, { passive:false });
+
+// ==================== DEATH + WIN/LOSE ====================
+const deathFlash = document.getElementById('deathFlash');
+const clockEl = document.getElementById('clock');
+const heartbeatEl = document.getElementById('heartbeat');
+const winNearMisses = document.getElementById('winNearMisses');
+const loseNearMisses = document.getElementById('loseNearMisses');
+const loseTime = document.getElementById('loseTime');
+
+// FIX: formatTime nhận đơn vị PHÚT game (không phải giây)
+function formatTime(gameMinutes) {
+  const hh = Math.floor(gameMinutes / 60);
+  const mm = Math.floor(gameMinutes % 60);
+  return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+}
+
+function killPlayer() {
+  if (gameState.ended) return;
+  gameState.ended = true;
+  playDeath();
+  deathFlash.classList.add('show');
+  heartbeatEl.classList.remove('show');
+
+  setTimeout(() => {
+    deathFlash.classList.remove('show');
+    loseTime.textContent = formatTime(gameState.gameTime);
+    loseNearMisses.textContent = gameState.nearMisses;
+    loseScreen.classList.add('show');
+  }, 1000);
+}
+
+function winGame() {
+  if (gameState.ended) return;
+  gameState.ended = true;
+  playVictory();
+  heartbeatEl.classList.remove('show');
+  winNearMisses.textContent = gameState.nearMisses;
+  winScreen.classList.add('show');
+}
+
+function resetGame() {
+  // Player
+  player.x = player.spawnX;
+  player.y = player.spawnY;
+  player.dir = 0;
+
+  // Killer
+  const sp = pickKillerSpawn();
+  killer.x = sp.x; killer.y = sp.y;
+  killer.spawnX = sp.x; killer.spawnY = sp.y;
+  setKillerState('WANDER', sp);
+  killer.lastSeen = 0;
+  killer.investigateTimer = KILLER_AI.investigateInterval;
+
+  // Inventory
+  inventory.flashlight = false;
+  inventory.key = false;
+  inventory.equipped = null;
+  inventory.flashlightOn = false;
+
+  // Items
+  for (const it of ITEMS) {
+    it.picked = false;
+    it.x = it.spawnX;
+    it.y = it.spawnY;
+  }
+
+  // Cửa + cầu dao + điện
+  doorMid.locked = false;
+  breaker.on = true;
+  power.on = true;
+  power.dimFactor = 1.0;
+  power.targetDim = 1.0;
+  power.flicker = 0;
+  powerAlert.classList.remove('show');
+
+  // Game state
+  gameState.gameTime = 0;
+  gameState.nearMisses = 0;
+  gameState.nearMissCooldown = 0;
+  gameState.ended = false;
+  heartbeatEl.classList.remove('show');
+
+  // UI
+  clockEl.textContent = '00:00';
+  clockEl.classList.remove('near-dawn');
+  winScreen.classList.remove('show');
+  loseScreen.classList.remove('show');
+
+  updateInventoryUI();
+}
+
+// ==================== CAMERA ====================
+const camera = { x: player.x, y: player.y };
+
+// ==================== JOYSTICK ====================
+const joyBase = document.getElementById('joyBase');
+const joyKnob = document.getElementById('joyKnob');
+let joyActive = false;
+let joyId = null;
+let joyStart = { x:0, y:0 };
+let joyDelta = { x:0, y:0 };
+const JOY_RADIUS = 45;
+
+joyBase.addEventListener('touchstart', (e) => {
+  const t = e.changedTouches[0];
+  if (joyActive) return;
+  joyActive = true;
+  joyId = t.identifier;
+  joyStart = { x: t.clientX, y: t.clientY };
+  e.preventDefault();
+}, { passive:false });
+
+joyBase.addEventListener('touchmove', (e) => {
+  if (!joyActive) return;
+  for (const t of e.changedTouches) {
+    if (t.identifier !== joyId) continue;
+    let dx = t.clientX - joyStart.x;
+    let dy = t.clientY - joyStart.y;
+    const len = Math.hypot(dx, dy);
+    if (len > JOY_RADIUS) { dx = dx / len * JOY_RADIUS; dy = dy / len * JOY_RADIUS; }
+    joyDelta.x = dx; joyDelta.y = dy;
+    joyKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+  }
+  e.preventDefault();
+}, { passive:false });
+
+function joyEnd(e) {
+  for (const t of e.changedTouches) {
+    if (t.identifier === joyId) {
+      joyActive = false; joyId = null;
+      joyDelta.x = 0; joyDelta.y = 0;
+      joyKnob.style.transform = 'translate(-50%,-50%)';
+    }
+  }
+  e.preventDefault();
+}
+joyBase.addEventListener('touchend', joyEnd, { passive:false });
+joyBase.addEventListener('touchcancel', joyEnd, { passive:false });
+
+// ==================== COLLISION ====================
+function isBlocked(px, py, r) {
+  const pts = [
+    [px - r, py], [px + r, py], [px, py - r], [px, py + r],
+    [px - r*0.7, py - r*0.7], [px + r*0.7, py - r*0.7],
+    [px - r*0.7, py + r*0.7], [px + r*0.7, py + r*0.7],
+  ];
+  for (const [cx, cy] of pts) {
+    const gx = Math.floor(cx / TILE), gy = Math.floor(cy / TILE);
+    if (gx < 0 || gx >= MAP_W || gy < 0 || gy >= MAP_H) return true;
+    if (isWall(gx, gy)) return true;
+    if (isFurniture(gx, gy)) return true;
+  }
+  return false;
+}
+
+function movePlayer(dx, dy) {
+  const r = player.r;
+  if (!isBlocked(player.x + dx, player.y, r)) player.x += dx;
+  if (!isBlocked(player.x, player.y + dy, r)) player.y += dy;
+}
+
+function moveKiller(dx, dy) {
+  const r = killer.r;
+  let moved = false;
+  if (!isBlocked(killer.x + dx, killer.y, r)) { killer.x += dx; moved = true; }
+  if (!isBlocked(killer.x, killer.y + dy, r)) { killer.y += dy; moved = true; }
+  return moved;
+}
+// ==================== A* PATHFINDING ====================
+function heuristic(ax, ay, bx, by) {
+  const dx = Math.abs(ax - bx);
+  const dy = Math.abs(ay - by);
+  return (dx + dy) + (Math.SQRT2 - 2) * Math.min(dx, dy);
+}
+
+function findPath(startGx, startGy, goalGx, goalGy) {
+  if (isWall(goalGx, goalGy) || isFurniture(goalGx, goalGy)) {
+    const alt = findNearestFreeCell(goalGx, goalGy);
+    if (!alt) return [];
+    goalGx = alt.gx;
+    goalGy = alt.gy;
+  }
+
+  if (startGx === goalGx && startGy === goalGy) return [];
+
+  const MAX_NODES = 500;
+  const open = [];
+  const closed = new Set();
+
+  const key = (x, y) => x + ',' + y;
+
+  const startNode = {
+    gx: startGx, gy: startGy,
+    g: 0,
+    f: heuristic(startGx, startGy, goalGx, goalGy),
+    parent: null,
+  };
+
+  open.push(startNode);
+  let nodesExplored = 0;
+
+  const DIRS = [
+    [1, 0, 1],    [-1, 0, 1],    [0, 1, 1],    [0, -1, 1],
+    [1, 1, Math.SQRT2], [1, -1, Math.SQRT2],
+    [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2],
+  ];
+
+  while (open.length > 0 && nodesExplored < MAX_NODES) {
+    let bestIdx = 0;
+    for (let i = 1; i < open.length; i++) {
+      if (open[i].f < open[bestIdx].f) bestIdx = i;
+    }
+    const current = open.splice(bestIdx, 1)[0];
+    nodesExplored++;
+
+    const ck = key(current.gx, current.gy);
+    if (closed.has(ck)) continue;
+    closed.add(ck);
+
+    if (current.gx === goalGx && current.gy === goalGy) {
+      const path = [];
+      let n = current;
+      while (n && n.parent !== null) {
+        path.unshift({ gx: n.gx, gy: n.gy });
+        n = n.parent;
+      }
+      return path;
+    }
+
+    for (const [dx, dy, cost] of DIRS) {
+      const nx = current.gx + dx;
+      const ny = current.gy + dy;
+
+      if (nx < 0 || nx >= MAP_W || ny < 0 || ny >= MAP_H) continue;
+      if (isWall(nx, ny)) continue;
+      if (isFurniture(nx, ny)) continue;
+
+      if (dx !== 0 && dy !== 0) {
+        if (isWall(current.gx + dx, current.gy)) continue;
+        if (isWall(current.gx, current.gy + dy)) continue;
+      }
+
+      const nk = key(nx, ny);
+      if (closed.has(nk)) continue;
+
+      const tentativeG = current.g + cost;
+      const existing = open.find(n => n.gx === nx && n.gy === ny);
+
+      if (!existing) {
+        open.push({
+          gx: nx, gy: ny,
+          g: tentativeG,
+          f: tentativeG + heuristic(nx, ny, goalGx, goalGy),
+          parent: current,
+        });
+      } else if (tentativeG < existing.g) {
+        existing.g = tentativeG;
+        existing.f = tentativeG + heuristic(nx, ny, goalGx, goalGy);
+        existing.parent = current;
+      }
+    }
+  }
+
+  return [];
+}
+
+function findNearestFreeCell(gx, gy) {
+  for (let r = 1; r < 8; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+        const nx = gx + dx, ny = gy + dy;
+        if (nx < 0 || nx >= MAP_W || ny < 0 || ny >= MAP_H) continue;
+        if (isWall(nx, ny) || isFurniture(nx, ny)) continue;
+        return { gx: nx, gy: ny };
+      }
+    }
+  }
+  return null;
+}
+
+function updateKillerPath() {
+  const startGx = Math.floor(killer.x / TILE);
+  const startGy = Math.floor(killer.y / TILE);
+  const goalGx = Math.floor(killer.target.x / TILE);
+  const goalGy = Math.floor(killer.target.y / TILE);
+
+  killer.path = findPath(startGx, startGy, goalGx, goalGy);
+  killer.pathIndex = 0;
+  killer.pathRecalcTimer = 500;
+}
+
+// ==================== LINE OF SIGHT ====================
+function lineOfSight(x1, y1, x2, y2) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const dist = Math.hypot(dx, dy);
+  if (dist === 0) return true;
+  const nx = dx / dist;
+  const ny = dy / dist;
+  const step = 6;
+  let travelled = 0;
+  while (travelled < dist) {
+    travelled += step;
+    const x = x1 + nx * travelled;
+    const y = y1 + ny * travelled;
+    const gx = Math.floor(x / TILE);
+    const gy = Math.floor(y / TILE);
+    if (gx < 0 || gx >= MAP_W || gy < 0 || gy >= MAP_H) return false;
+    if (isWall(gx, gy)) return false;
+    if (isFurniture(gx, gy)) return false;
+  }
+  return true;
+}
+
+// ==================== KILLER AI ====================
+function updateKiller(dt) {
+  if (!gameState.started || gameState.ended) return;
+
+  const now = performance.now();
+  const distToPlayer = Math.hypot(player.x - killer.x, player.y - killer.y);
+
+  const canSee = distToPlayer < killer.visionRange &&
+                 lineOfSight(killer.x, killer.y, player.x, player.y);
+
+  if (canSee) {
+    killer.lastSeen = now;
+    if (killer.state !== 'CHASE') {
+      setKillerState('CHASE');
+    }
+  }
+
+  killer.stateTimer += dt;
+  killer.investigateTimer -= dt;
+
+  switch (killer.state) {
+    case 'WANDER':      updateWander(dt, canSee); break;
+    case 'CHASE':       updateChase(dt, canSee, now); break;
+    case 'GIVE_UP':     updateGiveUp(dt); break;
+    case 'INVESTIGATE': updateInvestigate(dt); break;
+    case 'SABOTAGE':    updateSabotage(dt); break;
+  }
+
+  moveAlongPath(dt);
+
+  // Đếm near miss — killer gần < 3 ô
+  if (distToPlayer < 3 * TILE && gameState.nearMissCooldown <= 0) {
+    gameState.nearMisses++;
+    gameState.nearMissCooldown = 3000;
+  }
+
+  // Chạm player → giết
+  if (distToPlayer < player.r + killer.r + 2) {
+    killPlayer();
+  }
+}
+
+// ==================== STATE: WANDER ====================
+function updateWander(dt, canSee) {
+if (canSee) return;
+
+  if (killer.investigateTimer <= 0) {
+    killer.investigateTimer = KILLER_AI.investigateInterval;
+    if (Math.random() < KILLER_AI.investigateChance) {
+      setKillerState('INVESTIGATE');
+      killer.stateStep = 0;
+      killer.target.x = WAYPOINTS.doorIn.gx * TILE + TILE / 2;
+      killer.target.y = WAYPOINTS.doorIn.gy * TILE + TILE / 2;
+      updateKillerPath();
+      return;
+    }
+  }
+
+  const dToTarget = Math.hypot(killer.target.x - killer.x, killer.target.y - killer.y);
+  if (dToTarget < TILE * 0.5) {
+    const newT = pickWanderTarget();
+    killer.target.x = newT.x;
+    killer.target.y = newT.y;
+    updateKillerPath();
+  }
+
+  if (killer.path.length === 0) {
+    updateKillerPath();
+  }
+}
+
+// ==================== STATE: CHASE ====================
+function updateChase(dt, canSee, now) {
+  if (!canSee && now - killer.lastSeen > KILLER_AI.giveUpDuration) {
+    setKillerState('GIVE_UP');
+    killer.target.x = player.x;
+    killer.target.y = player.y;
+    killer.stateTimer = 0;
+    updateKillerPath();
+    return;
+  }
+
+  if (canSee) {
+    killer.target.x = player.x;
+    killer.target.y = player.y;
+    killer.path = [];
+    const ddx = player.x - killer.x;
+    const ddy = player.y - killer.y;
+    const dlen = Math.hypot(ddx, ddy);
+    if (dlen > 0.5) {
+      const nx = ddx / dlen;
+      const ny = ddy / dlen;
+      const step = killer.chaseSpeed * (dt / 16.67);
+      moveKiller(nx * step, ny * step);
+      killer.dir = Math.atan2(ny, nx);
+    }
+  } else {
+    if (killer.path.length === 0) {
+      updateKillerPath();
+    }
+  }
+}
+
+// ==================== STATE: GIVE_UP ====================
+function updateGiveUp(dt) {
+  const dToTarget = Math.hypot(killer.target.x - killer.x, killer.target.y - killer.y);
+
+  if (dToTarget < TILE * 0.5 || killer.stateTimer > 5000) {
+    setKillerState('WANDER');
+    const newT = pickWanderTarget();
+    killer.target.x = newT.x;
+    killer.target.y = newT.y;
+    updateKillerPath();
+    return;
+  }
+
+  if (killer.path.length === 0) {
+    updateKillerPath();
+  }
+}
+
+// ==================== STATE: INVESTIGATE ====================
+function updateInvestigate(dt) {
+  const roomCheckTime = KILLER_AI.checkRoomDuration;
+  const doorWaitTime = KILLER_AI.doorWaitDuration;
+
+  // FIX: Timeout tổng 15s → bỏ cuộc
+  if (killer.stateTimer > 15000) {
+    setKillerState('WANDER');
+    const newT = pickWanderTarget();
+    killer.target.x = newT.x;
+    killer.target.y = newT.y;
+    updateKillerPath();
+    return;
+  }
+
+  const moveTo = (wx, wy) => {
+    killer.target.x = wx * TILE + TILE / 2;
+    killer.target.y = wy * TILE + TILE / 2;
+    updateKillerPath();
+  };
+
+  // FIX: bán kính nearTarget từ 0.6 → 1.0
+  const nearTarget = () => {
+    return Math.hypot(killer.target.x - killer.x, killer.target.y - killer.y) < TILE * 1.0;
+  };
+
+  switch (killer.stateStep) {
+    case 0:
+      moveTo(WAYPOINTS.doorIn.gx, WAYPOINTS.doorIn.gy);
+      killer.stateStep = 1;
+      break;
+
+    case 1:
+      if (nearTarget()) {
+        moveTo(WAYPOINTS.room1.gx, WAYPOINTS.room1.gy);
+        killer.stateStep = 2;
+      }
+      break;
+
+    case 2:
+      if (nearTarget()) {
+        killer.roomCheckTimer = roomCheckTime;
+        killer.stateStep = 3;
+      }
+      break;
+
+    case 3:
+      killer.roomCheckTimer -= dt;
+      if (killer.roomCheckTimer <= 0) {
+        moveTo(WAYPOINTS.doorMidIn.gx, WAYPOINTS.doorMidIn.gy);
+        killer.stateStep = 4;
+      }
+      break;
+
+    case 4:
+      if (nearTarget()) {
+        if (doorMid.locked) {
+          killer.doorWaitTimer = doorWaitTime;
+          killer.stateStep = 5;
+        } else {
+          moveTo(WAYPOINTS.room2.gx, WAYPOINTS.room2.gy);
+          killer.stateStep = 6;
+        }
+      }
+      break;
+
+    case 5:
+      killer.doorWaitTimer -= dt;
+      if (killer.doorWaitTimer <= 0) {
+        moveTo(WAYPOINTS.doorIn.gx, WAYPOINTS.doorIn.gy);
+        killer.stateStep = 7;
+      }
+      break;
+
+    case 6:
+      if (nearTarget()) {
+        killer.roomCheckTimer = roomCheckTime;
+        killer.stateStep = 8;
+      }
+      break;
+
+    case 7:
+      if (nearTarget()) {
+        killer.stateStep = 9;
+      }
+      break;
+
+    case 8:
+      killer.roomCheckTimer -= dt;
+      if (killer.roomCheckTimer <= 0) {
+        moveTo(WAYPOINTS.doorIn.gx, WAYPOINTS.doorIn.gy);
+        killer.stateStep = 7;
+      }
+      break;
+
+    case 9:
+      if (Math.random() < KILLER_AI.sabotageChance) {
+        setKillerState('SABOTAGE');
+        killer.target.x = WAYPOINTS.breaker.gx * TILE + TILE / 2;
+        killer.target.y = WAYPOINTS.breaker.gy * TILE + TILE / 2;
+        killer.stateStep = 0;
+        updateKillerPath();
+      } else {
+        setKillerState('WANDER');
+        const newT = pickWanderTarget();
+        killer.target.x = newT.x;
+        killer.target.y = newT.y;
+        updateKillerPath();
+      }
+      break;
+  }
+
+  if (killer.path.length === 0 && killer.stateStep < 9) {
+    updateKillerPath();
+    if (killer.path.length === 0) {
+      setKillerState('WANDER');
+      const newT = pickWanderTarget();
+      killer.target.x = newT.x;
+      killer.target.y = newT.y;
+      updateKillerPath();
+    }
+  }
+}
+
+// ==================== STATE: SABOTAGE ====================
+function updateSabotage(dt) {
+  const dToTarget = Math.hypot(killer.target.x - killer.x, killer.target.y - killer.y);
+
+  if (dToTarget < TILE * 0.7) {
+    if (breaker.on) {
+      breaker.on = false;
+      power.targetDim = 0;
+      power.flicker = 0;
+      powerAlert.classList.add('show');
+      playBreaker();
+    }
+    setKillerState('WANDER');
+    const newT = pickWanderTarget();
+    killer.target.x = newT.x;
+    killer.target.y = newT.y;
+    updateKillerPath();
+    return;
+  }
+
+  if (killer.path.length === 0) {
+    updateKillerPath();
+    if (killer.path.length === 0) {
+      setKillerState('WANDER');
+      const newT = pickWanderTarget();
+      killer.target.x = newT.x;
+      killer.target.y = newT.y;
+      updateKillerPath();
+    }
+  }
+}
+
+// ==================== DI CHUYỂN THEO PATH ====================
+function moveAlongPath(dt) {
+  killer.pathRecalcTimer -= dt;
+
+  if (killer.state === 'CHASE' &&
+      lineOfSight(killer.x, killer.y, player.x, player.y)) {
+    return;
+  }
+
+  if (killer.path.length === 0) return;
+  if (killer.pathIndex >= killer.path.length) return;
+
+  const wp = killer.path[killer.pathIndex];
+  const wx = wp.gx * TILE + TILE / 2;
+  const wy = wp.gy * TILE + TILE / 2;
+
+  const dx = wx - killer.x;
+  const dy = wy - killer.y;
+  const dist = Math.hypot(dx, dy);
+
+  if (dist < 4) {
+    killer.pathIndex++;
+    return;
+  }
+
+  const nx = dx / dist;
+  const ny = dy / dist;
+
+  let speed;
+  if (killer.state === 'CHASE') speed = killer.chaseSpeed;
+  else if (killer.state === 'INVESTIGATE') speed = killer.wanderSpeed * 1.1;
+  else if (killer.state === 'SABOTAGE') speed = killer.wanderSpeed * 1.05;
+  else speed = killer.wanderSpeed;
+
+  const step = speed * (dt / 16.67);
+  const moved = moveKiller(nx * step, ny * step);
+  killer.dir = Math.atan2(ny, nx);
+
+  if (!moved) {
+    killer.stuckTimer += dt;
+    if (killer.stuckTimer > 800) {
+      killer.stuckTimer = 0;
+      updateKillerPath();
+      if (killer.path.length === 0 && killer.state === 'WANDER') {
+        const newT = pickWanderTarget();
+        killer.target.x = newT.x;
+        killer.target.y = newT.y;
+        updateKillerPath();
+      }
+    }
+  } else {
+    killer.stuckTimer = 0;
+  }
+}
+// ==================== RAYCAST ====================
+function raycast(x0, y0, angle, maxDist) {
+  const dx = Math.cos(angle);
+  const dy = Math.sin(angle);
+  const step = 4;
+  let dist = 0;
+  while (dist < maxDist) {
+    dist += step;
+    const x = x0 + dx * dist;
+    const y = y0 + dy * dist;
+    const gx = Math.floor(x / TILE);
+    const gy = Math.floor(y / TILE);
+    if (gx < 0 || gx >= MAP_W || gy < 0 || gy >= MAP_H) return dist;
+    if (isWall(gx, gy)) return dist;
+    if (isFurniture(gx, gy)) return dist;
+  }
+  return maxDist;
+}
+
+// ==================== DRAW HELPERS ====================
+function drawPlayer(px, py) {
+  const s = player.r * 2;
+  ctx.save();
+  ctx.translate(px, py);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(-s/2, -s/2, s, s);
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(-s/2, -s/2, s, s);
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.arc(-4, -3, 1.8, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc( 4, -3, 1.8, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath();
+  ctx.arc(0, 1, 5, 0.15 * Math.PI, 0.85 * Math.PI);
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 1.8;
+  ctx.stroke();
+  ctx.rotate(player.dir);
+  ctx.beginPath();
+  ctx.moveTo(s/2 + 2, 0);
+  ctx.lineTo(s/2 - 2, -4);
+  ctx.lineTo(s/2 - 2, 4);
+  ctx.closePath();
+  ctx.fillStyle = '#ffdd44';
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawKiller(px, py) {
+  const s = killer.r * 2;
+  const chasing = (killer.state === 'CHASE');
+  const investigating = (killer.state === 'INVESTIGATE' || killer.state === 'SABOTAGE');
+
+  ctx.save();
+  ctx.translate(px, py);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(-s/2, -s/2, s, s);
+  ctx.strokeStyle = chasing ? '#000000' : '#333333';
+  ctx.lineWidth = chasing ? 2 : 1.5;
+  ctx.strokeRect(-s/2, -s/2, s, s);
+
+  if (chasing) {
+    const pulse = 0.3 + 0.2 * Math.sin(performance.now() / 150);
+    ctx.strokeStyle = `rgba(255,0,0,${pulse})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, s * 0.9, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  if (investigating) {
+    ctx.strokeStyle = `rgba(255,180,0,0.4)`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, s * 0.85, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = '#ff2020';
+  ctx.beginPath(); ctx.arc(-4, -3, 2.2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc( 4, -3, 2.2, 0, Math.PI * 2); ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(0, 2, 6, 0.15 * Math.PI, 0.85 * Math.PI);
+  ctx.strokeStyle = '#ff2020';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.rotate(killer.dir);
+  ctx.beginPath();
+  ctx.moveTo(s/2 + 2, 0);
+  ctx.lineTo(s/2 - 2, -4);
+  ctx.lineTo(s/2 - 2, 4);
+  ctx.closePath();
+  ctx.fillStyle = '#ff2020';
+  ctx.fill();
+
+  ctx.rotate(-killer.dir);
+  const knifeAngle = killer.dir + Math.PI * 0.35;
+  const kx = Math.cos(knifeAngle) * s * 0.7;
+  const ky = Math.sin(knifeAngle) * s * 0.7;
+  ctx.save();
+  ctx.translate(kx, ky);
+  ctx.rotate(knifeAngle + Math.PI / 2);
+  ctx.font = '14px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('🔪', 0, 0);
+  ctx.restore();
+
+  ctx.restore();
+
+  if (killer.debugPath && killer.path.length > 0) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,0,0.6)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(killer.x, killer.y);
+    for (let i = killer.pathIndex; i < killer.path.length; i++) {
+      const wp = killer.path[i];
+      ctx.lineTo(wp.gx * TILE + TILE / 2, wp.gy * TILE + TILE / 2);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawEquippedItem(px, py) {
+  if (!inventory.equipped) return;
+  if (inventory.equipped === 'flashlight' && !inventory.flashlightOn) return;
+  const dist = player.r + 6;
+  const ix = px + Math.cos(player.dir) * dist;
+  const iy = py + Math.sin(player.dir) * dist;
+  const icon = inventory.equipped === 'flashlight' ? '🔦' : '🔑';
+  ctx.save();
+  ctx.font = '16px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(icon, ix, iy);
+  ctx.restore();
+}
+
+function drawDoorMid() {
+  const px = doorMid.gx * TILE;
+  const py = doorMid.gy * TILE;
+
+  if (doorMid.locked) {
+    ctx.fillStyle = '#5a1a1a';
+    ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
+    ctx.fillStyle = '#8a2a2a';
+    ctx.fillRect(px + 5, py + 5, TILE - 10, TILE - 10);
+    ctx.font = '16px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🔒', px + TILE / 2, py + TILE / 2);
+  } else {
+    ctx.fillStyle = '#5a3a1e';
+    ctx.fillRect(px + 3, py + 3, TILE - 6, TILE - 6);
+    ctx.fillStyle = '#8a5a2e';
+    ctx.fillRect(px + 5, py + 5, TILE - 10, TILE - 10);
+  }
+}
+
+function drawBreaker() {
+  const px = breaker.gx * TILE;
+  const py = breaker.gy * TILE;
+  const cx = px + TILE / 2;
+  const cy = py + TILE / 2;
+
+  ctx.save();
+  ctx.fillStyle = '#3a3a3a';
+  ctx.fillRect(cx - 12, cy - 10, 24, 20);
+  ctx.strokeStyle = '#1a1a1a';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(cx - 12, cy - 10, 24, 20);
+
+  const leverY = breaker.on ? cy - 6 : cy + 6;
+  ctx.fillStyle = breaker.on ? '#44dd44' : '#dd4444';
+  ctx.fillRect(cx - 4, leverY - 3, 8, 6);
+
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = breaker.on ? '#88ff88' : '#ff8888';
+  ctx.fillText('⚡', cx, cy + 14);
+
+  ctx.restore();
+}
+
+function buildFlashlightPolygon(offX, offY) {
+  const px = player.x + offX;
+  const py = player.y + offY;
+  const range = 10 * TILE;
+  const halfAngle = Math.PI / 6;
+  const rays = 32;
+
+  const pts = [{ x: px, y: py }];
+  for (let i = 0; i <= rays; i++) {
+    const a = player.dir - halfAngle + (2 * halfAngle) * (i / rays);
+    const d = raycast(player.x, player.y, a, range);
+    pts.push({ x: px + Math.cos(a) * d, y: py + Math.sin(a) * d });
+  }
+  return { pts, range, px, py };
+}
+
+function carveFlashlight(dctx, offX, offY) {
+  if (!inventory.flashlightOn || inventory.equipped !== 'flashlight') return;
+
+  const { pts, range, px, py } = buildFlashlightPolygon(offX, offY);
+
+  dctx.save();
+  dctx.beginPath();
+  dctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) dctx.lineTo(pts[i].x, pts[i].y);
+  dctx.closePath();
+  dctx.clip();
+
+  const g = dctx.createRadialGradient(px, py, 0, px, py, range);
+  g.addColorStop(0,    'rgba(0,0,0,1)');
+  g.addColorStop(0.25, 'rgba(0,0,0,0.95)');
+  g.addColorStop(0.55, 'rgba(0,0,0,0.75)');
+  g.addColorStop(0.8,  'rgba(0,0,0,0.4)');
+  g.addColorStop(1,    'rgba(0,0,0,0.05)');
+  dctx.fillStyle = g;
+  dctx.fillRect(0, 0, W, H);
+
+  dctx.restore();
+}
+
+// ==================== CLOCK UPDATE ====================
+function updateClock() {
+  const timeStr = formatTime(gameState.gameTime);
+  clockEl.textContent = timeStr;
+
+  const remaining = gameState.gameDuration - gameState.gameTime;
+  if (remaining < 60) {
+    clockEl.classList.add('near-dawn');
+  } else {
+    clockEl.classList.remove('near-dawn');
+  }
+}
+
+// ==================== HEARTBEAT WARNING ====================
+function updateHeartbeat() {
+  if (!gameState.started || gameState.ended) {
+    heartbeatEl.classList.remove('show');
+    return;
+  }
+  const dist = Math.hypot(player.x - killer.x, player.y - killer.y);
+  if (dist < 5 * TILE) {
+    heartbeatEl.classList.add('show');
+    const intensity = 1 - dist / (5 * TILE);
+    const rate = 0.4 + intensity * 0.8;
+    heartbeatEl.style.animationDuration = rate + 's';
+  } else {
+    heartbeatEl.classList.remove('show');
+  }
+}
+
+// ==================== HEARTBEAT SOUND ====================
+function updateHeartbeatSound(dt) {
+  if (!gameState.started || gameState.ended) return;
+  if (!gameState.audioEnabled) return;
+
+  const dist = Math.hypot(player.x - killer.x, player.y - killer.y);
+  if (dist > 5 * TILE) {
+    audio.heartbeatRate = 0;
+    return;
+  }
+
+  const intensity = 1 - dist / (5 * TILE);
+  const interval = (1.2 - intensity * 0.6) * 1000;
+  audio.heartbeatTimer -= dt;
+  if (audio.heartbeatTimer <= 0) {
+    playHeartbeat();
+    audio.heartbeatTimer = interval;
+  }
+}
+// ==================== UPDATE ====================
+const posInfo = document.getElementById('posInfo');
+
+function update(dt) {
+  if (!gameState.started || gameState.ended) {
+    return;
+  }
+
+  const dtSec = dt / 1000;
+
+  // FIX: gameTime mang đơn vị PHÚT game
+  // 1s thật = 1 phút game → cộng thẳng dtSec
+  gameState.gameTime += dtSec;
+
+  gameState.nearMissCooldown = Math.max(0, gameState.nearMissCooldown - dt);
+
+  // Win?
+  if (gameState.gameTime >= gameState.gameDuration) {
+    gameState.gameTime = gameState.gameDuration;
+    winGame();
+    return;
+  }
+
+  // ---- Hiệu ứng điện ----
+  if (power.flicker > 0) {
+    power.flickerTimer += dt;
+    if (power.flickerTimer > 120) {
+      power.flickerTimer = 0;
+      power.flicker--;
+      power.dimFactor = (power.dimFactor > 0.5) ? 0 : 1;
+      if (power.flicker === 0) {
+        power.dimFactor = 1;
+        power.targetDim = 1;
+      }
+    }
+  } else {
+    const speed = 1.5;
+    if (power.dimFactor < power.targetDim) {
+      power.dimFactor = Math.min(power.targetDim, power.dimFactor + speed * dtSec);
+    } else if (power.dimFactor > power.targetDim) {
+      power.dimFactor = Math.max(power.targetDim, power.dimFactor - speed * dtSec);
+    }
+  }
+
+  // ---- Di chuyển player ----
+  const jx = joyDelta.x / JOY_RADIUS;
+  const jy = joyDelta.y / JOY_RADIUS;
+  const len = Math.hypot(jx, jy);
+
+  if (len > 0.15) {
+    const nx = jx / Math.max(1, len);
+    const ny = jy / Math.max(1, len);
+    const move = player.speed * (dt / 16.67);
+    movePlayer(nx * move, ny * move);
+    player.dir = Math.atan2(ny, nx);
+  }
+
+  // ---- AI Killer ----
+  updateKiller(dt);
+
+  // ---- Camera ----
+  camera.x += (player.x - camera.x) * 0.15;
+  camera.y += (player.y - camera.y) * 0.15;
+  const halfW = W / 2, halfH = H / 2;
+  if (WORLD_W > W) camera.x = Math.max(halfW, Math.min(WORLD_W - halfW, camera.x));
+  else camera.x = WORLD_W / 2;
+  if (WORLD_H > H) camera.y = Math.max(halfH, Math.min(WORLD_H - halfH, camera.y));
+  else camera.y = WORLD_H / 2;
+
+  // ---- Item gần nhất ----
+  nearestItem = null;
+  let bestDist = Infinity;
+  for (const it of ITEMS) {
+    if (it.picked) continue;
+    const d = Math.hypot(it.x - player.x, it.y - player.y);
+    if (d < it.pickupRange && d < bestDist) {
+      bestDist = d;
+      nearestItem = it;
+    }
+  }
+  if (nearestItem) pickupBtn.classList.add('show');
+  else pickupBtn.classList.remove('show');
+
+  // ---- Cửa ----
+  const doorCX = doorMid.gx * TILE + TILE / 2;
+  const doorCY = doorMid.gy * TILE + TILE / 2;
+  const distToDoor = Math.hypot(doorCX - player.x, doorCY - player.y);
+  doorInRange = (distToDoor < 1.5 * TILE) && (inventory.equipped === 'key');
+
+  const offX = -camera.x + W / 2;
+  const offY = -camera.y + H / 2;
+
+  if (doorInRange) {
+    doorBtn.style.left = (doorCX + offX) + 'px';
+    doorBtn.style.top  = (doorCY + offY) + 'px';
+    doorBtn.textContent = doorMid.locked ? '🔓 MỞ' : '🔒 KHÓA';
+    doorBtn.classList.add('show');
+  } else {
+    doorBtn.classList.remove('show');
+  }
+
+  // ---- Cầu dao ----
+  const brCX = breaker.gx * TILE + TILE / 2;
+  const brCY = breaker.gy * TILE + TILE / 2;
+  const distToBr = Math.hypot(brCX - player.x, brCY - player.y);
+  breakerInRange = (distToBr < 1.5 * TILE);
+
+  if (breakerInRange) {
+    breakerBtn.style.left = (brCX + offX) + 'px';
+    breakerBtn.style.top  = (brCY + offY) + 'px';
+    breakerBtn.textContent = breaker.on ? '⚡ TẮT ĐIỆN' : '⚡ BẬT ĐIỆN';
+    breakerBtn.classList.add('show');
+  } else {
+    breakerBtn.classList.remove('show');
+  }
+
+  // ---- Clock + Heartbeat ----
+  updateClock();
+  updateHeartbeat();
+  updateHeartbeatSound(dt);
+
+  // ---- HUD ----
+  posInfo.textContent = `X:${(player.x/TILE).toFixed(1)} Y:${(player.y/TILE).toFixed(1)} | ${killer.state}`;
+}
+
+// ==================== RENDER ====================
+function render() {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+
+  if (!gameState.started) return;
+
+  const offX = -camera.x + W / 2;
+  const offY = -camera.y + H / 2;
+
+  ctx.save();
+  ctx.translate(offX, offY);
+
+  // Background
+  ctx.drawImage(bgCanvas, 0, 0);
+
+  // Cửa + cầu dao
+  drawDoorMid();
+  drawBreaker();
+
+  // Items chưa nhặt
+  for (const it of ITEMS) {
+    if (it.picked) continue;
+    ctx.save();
+    ctx.font = '22px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const pulse = 0.7 + 0.3 * Math.sin(performance.now() / 300);
+    ctx.globalAlpha = pulse;
+    ctx.fillText(it.icon, it.x, it.y);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = `rgba(255,220,100,${pulse * 0.8})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(it.x, it.y, 14, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Viền rìa map
+  ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(0, 0, WORLD_W, WORLD_H);
+
+  // Killer + Player
+  drawKiller(killer.x, killer.y);
+  drawPlayer(player.x, player.y);
+  drawEquippedItem(player.x, player.y);
+
+  ctx.restore();
+
+  // ============ OVERLAY TỐI ============
+  const darkLayer = document.createElement('canvas');
+  darkLayer.width = W;
+  darkLayer.height = H;
+  const dctx = darkLayer.getContext('2d');
+
+  const outsideAlpha = 0.96;
+  dctx.fillStyle = `rgba(0,0,0,${outsideAlpha})`;
+  dctx.fillRect(0, 0, W, H);
+
+  dctx.globalCompositeOperation = 'destination-out';
+
+  // Vùng sáng nhà
+  const housePx = (HOUSE.x * TILE) + offX;
+  const housePy = (HOUSE.y * TILE) + offY;
+  const housePw = HOUSE.w * TILE;
+  const housePh = HOUSE.h * TILE;
+  const houseCx = housePx + housePw / 2;
+  const houseCy = housePy + housePh / 2;
+  const houseRadius = Math.hypot(housePw, housePh) / 2 + 30;
+
+  const houseLight = power.dimFactor;
+
+  if (houseLight > 0.01) {
+    const grad = dctx.createRadialGradient(
+      houseCx, houseCy, Math.min(housePw, housePh) * 0.3,
+      houseCx, houseCy, houseRadius
+    );
+    grad.addColorStop(0,    `rgba(0,0,0,${houseLight})`);
+    grad.addColorStop(0.5,  `rgba(0,0,0,${houseLight * 0.85})`);
+    grad.addColorStop(0.8,  `rgba(0,0,0,${houseLight * 0.4})`);
+    grad.addColorStop(1,    'rgba(0,0,0,0)');
+    dctx.fillStyle = grad;
+    dctx.beginPath();
+    dctx.arc(houseCx, houseCy, houseRadius, 0, Math.PI * 2);
+    dctx.fill();
+
+    for (const L of lights) {
+      const lx = L.x + offX, ly = L.y + offY;
+      const intensity = L.intensity * houseLight;
+      const g2 = dctx.createRadialGradient(lx, ly, 0, lx, ly, L.radius);
+      g2.addColorStop(0,   `rgba(0,0,0,${intensity})`);
+      g2.addColorStop(0.6, `rgba(0,0,0,${intensity * 0.5})`);
+      g2.addColorStop(1,   'rgba(0,0,0,0)');
+      dctx.fillStyle = g2;
+      dctx.beginPath();
+      dctx.arc(lx, ly, L.radius, 0, Math.PI * 2);
+      dctx.fill();
+    }
+  }
+
+  // Vùng sáng chồi
+  const shedPx = (shedX * TILE) + offX;
+  const shedPy = (shedY * TILE) + offY;
+  const shedPw = SHED.w * TILE;
+  const shedPh = SHED.h * TILE;
+  const shedCx = shedPx + shedPw / 2;
+  const shedCy = shedPy + shedPh / 2;
+  {
+    const grad = dctx.createRadialGradient(shedCx, shedCy, 0, shedCx, shedCy, 60);
+    grad.addColorStop(0,   'rgba(0,0,0,0.35)');
+    grad.addColorStop(1,   'rgba(0,0,0,0)');
+    dctx.fillStyle = grad;
+    dctx.beginPath();
+    dctx.arc(shedCx, shedCy, 60, 0, Math.PI * 2);
+    dctx.fill();
+  }
+
+  // Đèn pin
+  carveFlashlight(dctx, offX, offY);
+
+  ctx.drawImage(darkLayer, 0, 0);
+
+  // ============ ÁNH SÁNG VÀNG ============
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+
+  if (power.dimFactor > 0.01) {
+    for (const L of lights) {
+      const lx = L.x + offX, ly = L.y + offY;
+      const d = power.dimFactor;
+      const g = ctx.createRadialGradient(lx, ly, 0, lx, ly, L.radius * 0.9);
+      g.addColorStop(0,    `rgba(255,220,140,${0.45 * d})`);
+      g.addColorStop(0.5,  `rgba(255,200,120,${0.2 * d})`);
+      g.addColorStop(1,    'rgba(255,220,140,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(lx, ly, L.radius * 0.9, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  if (inventory.flashlightOn && inventory.equipped === 'flashlight') {
+    const { pts, range, px, py } = buildFlashlightPolygon(offX, offY);
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.closePath();
+    ctx.clip();
+    const g = ctx.createRadialGradient(px, py, 0, px, py, range);
+    g.addColorStop(0,   'rgba(255,245,200,0.5)');
+    g.addColorStop(0.4, 'rgba(255,240,180,0.25)');
+    g.addColorStop(1,   'rgba(255,240,180,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+  ctx.restore();
+
+  // ============ VIGNETTE ============
+  const vig = ctx.createRadialGradient(
+    W / 2, H / 2, Math.min(W, H) * 0.35,
+    W / 2, H / 2, Math.max(W, H) * 0.75
+  );
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,0,0,0.75)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, W, H);
+}
+
+// ==================== LOOP ====================
+let lastTime = performance.now();
+function loop() {
+  requestAnimationFrame(loop);
+  const now = performance.now();
+  let dt = now - lastTime;
+  lastTime = now;
+  if (dt > 100) dt = 100;
+  update(dt);
+  render();
+}
+loop();
+
+document.addEventListener('gesturestart', e => e.preventDefault());
+document.addEventListener('contextmenu', e => e.preventDefault());
+</script>
+</body>
+</html>
