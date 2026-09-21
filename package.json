@@ -1,0 +1,11 @@
+{
+  "name": "horror2d",
+  "version": "0.8.5",
+  "description": "Horror 2D survival game",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "author": "",
+  "license": "MIT"
+}
