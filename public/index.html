@@ -3,13 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>Horror 2D Multiplayer v0.9a</title>
+<title>Horror 2D Multiplayer v0.9b</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; }
   html, body { width:100%; height:100%; overflow:hidden; background:#000; font-family:sans-serif; color:#fff; }
   #game { position:fixed; inset:0; display:block; }
 
-  /* ============ START SCREEN ============ */
   #startScreen {
     position:fixed; inset:0; z-index:100;
     background:radial-gradient(ellipse at center, #1a0505 0%, #000 80%);
@@ -73,7 +72,6 @@
   #connStatus.ok { color:#44dd44; }
   #connStatus.err { color:#ff4444; }
 
-  /* ============ HUD ============ */
   #joyBase {
     position:fixed; left:20px; bottom:20px;
     width:120px; height:120px; border-radius:50%;
@@ -124,8 +122,28 @@
     border:1px solid rgba(100,255,100,0.3);
   }
 
+  #clock {
+    position:fixed; top:44px; left:50%;
+    transform:translateX(-50%);
+    color:#fff; font-size:16px; font-weight:bold;
+    text-shadow:0 0 8px #ffaa00, 1px 1px 2px #000;
+    z-index:10; background:rgba(0,0,0,0.5);
+    padding:4px 12px; border-radius:6px;
+    letter-spacing:2px; font-family:monospace;
+    border:1px solid rgba(255,170,0,0.3);
+  }
+  #clock.near-dawn {
+    color:#ffdd66;
+    text-shadow:0 0 15px #ffaa00, 0 0 30px #ff8800;
+    animation:clockGlow 1s infinite alternate;
+  }
+  @keyframes clockGlow {
+    from { box-shadow:0 0 8px rgba(255,170,0,0.4); }
+    to   { box-shadow:0 0 20px rgba(255,170,0,0.8); }
+  }
+
   #powerAlert {
-    position:fixed; top:52px; left:50%;
+    position:fixed; top:78px; left:50%;
     transform:translateX(-50%);
     color:#ff4444; font-size:14px; font-weight:bold;
     text-shadow:0 0 8px #ff0000, 1px 1px 2px #000;
@@ -175,7 +193,6 @@
     50%      { opacity:0.8; }
   }
 
-  /* Thông báo player join/leave */
   #notify {
     position:fixed; bottom:100px; left:50%;
     transform:translateX(-50%);
@@ -192,13 +209,27 @@
     80%  { opacity:1; transform:translate(-50%, 0); }
     100% { opacity:0; transform:translate(-50%, -10px); }
   }
+
+  .endScreen {
+    position:fixed; inset:0; z-index:100;
+    display:none; flex-direction:column;
+    align-items:center; justify-content:center;
+    padding:20px; backdrop-filter:blur(4px);
+  }
+  .endScreen.show { display:flex; }
+  #deathOverlay { background:radial-gradient(ellipse at center, rgba(120,0,0,0.7) 0%, rgba(0,0,0,0.95) 80%); }
+  #winOverlay { background:radial-gradient(ellipse at center, rgba(255,200,80,0.4) 0%, rgba(0,0,0,0.95) 80%); }
+  .endTitle { font-size:36px; font-weight:bold; letter-spacing:3px; margin-bottom:20px; text-align:center; }
+  .endInfo { font-size:16px; color:#ccc; margin:6px 0; letter-spacing:1px; }
+  .endInfo strong { color:#fff; }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
 
-<div id="hud">v0.9a <span id="myId"></span><br><span id="posInfo">...</span></div>
+<div id="hud">v0.9b <span id="myId"></span><br><span id="posInfo">...</span></div>
 <div id="playerCount">👥 1</div>
+<div id="clock">00:00</div>
 <div id="powerAlert">⚠️ MẤT ĐIỆN</div>
 
 <div id="joyBase"><div id="joyKnob"></div></div>
@@ -212,6 +243,16 @@
 
 <div id="heartbeat"></div>
 <div id="notify"></div>
+
+<div id="deathOverlay" class="endScreen">
+  <div class="endTitle" style="color:#ff3333;">💀 BẠN ĐÃ CHẾT</div>
+  <div class="endInfo">Hồi sinh sau <strong id="respawnCountdown">5</strong>s...</div>
+</div>
+
+<div id="winOverlay" class="endScreen">
+  <div class="endTitle" style="color:#ffcc44;">🌅 BẠN ĐÃ SỐNG SÓT</div>
+  <div class="endInfo">Cả nhóm sống sót đến 7h sáng!</div>
+</div>
 
 <div id="startScreen">
   <div id="startTitle">HORROR 2D</div>
@@ -246,17 +287,39 @@ const gameState = {
   started: false,
   myId: null,
   myName: 'Player',
-  myPos: { x: 0, y: 0, dir: 0 },       // vị trí local (predict)
-  serverPos: { x: 0, y: 0, dir: 0 },   // vị trí cuối từ server
-  players: new Map(),                  // id -> { x, y, dir, name }
+  myPos: { x: 0, y: 0, dir: 0 },
+  serverPos: { x: 0, y: 0, dir: 0 },
+  players: new Map(),
   connected: false,
   audioEnabled: true,
+  dead: false,
+  respawnAt: 0,
+  gameTime: 0,
+  gameDuration: 7 * 60,
+  running: false,
+  winner: false,
 };
 
 // ==================== SHARED STATE ====================
 const sharedState = {
   doorLocked: false,
   breakerOn: true,
+};
+
+// ==================== KILLER OBJECT (client) ====================
+const killer = {
+  x: 0, y: 0, dir: 0,
+  state: 'WANDER',
+  displayX: 0, displayY: 0,
+  visible: false,
+};
+
+// ==================== POWER (visual effect) ====================
+const power = {
+  flicker: 0,
+  flickerTimer: 0,
+  dimFactor: 1.0,
+  targetDim: 1.0,
 };
 
 // ==================== WEBSOCKET CLIENT ====================
@@ -296,81 +359,137 @@ function connectWS() {
     connStatus.className = 'err';
   };
 
-  ws.onclose = () => {
-    console.log('[WS] Disconnected');
+  ws.onclose = (e) => {
+    console.log('[WS] Disconnected code:', e.code, 'reason:', e.reason);
     gameState.connected = false;
     connStatus.textContent = '⚠️ Mất kết nối — đang thử lại...';
     connStatus.className = 'err';
     btnStart.disabled = true;
-    // Thử reconnect sau 2s
     setTimeout(connectWS, 2000);
   };
 }
 
+function sendWS(msg) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(msg));
+  }
+}
+
+// ==================== MESSAGE HANDLER ====================
 function handleMessage(msg) {
   switch (msg.type) {
     case 'welcome':
       gameState.myId = msg.id;
-      gameState.myPos.x = msg.players[msg.id].x;
-      gameState.myPos.y = msg.players[msg.id].y;
-      gameState.myPos.dir = msg.players[msg.id].dir;
-      gameState.serverPos.x = msg.players[msg.id].x;
-      gameState.serverPos.y = msg.players[msg.id].y;
-      gameState.serverPos.dir = msg.players[msg.id].dir;
+      if (msg.players[msg.id]) {
+        gameState.myPos.x = msg.players[msg.id].x;
+        gameState.myPos.y = msg.players[msg.id].y;
+        gameState.myPos.dir = msg.players[msg.id].dir;
+        gameState.serverPos.x = msg.players[msg.id].x;
+        gameState.serverPos.y = msg.players[msg.id].y;
+        gameState.serverPos.dir = msg.players[msg.id].dir;
+      }
 
-// Load danh sách players (BỎ chính mình)
-gameState.players.clear();
-for (const [id, p] of Object.entries(msg.players)) {
-  if (id === gameState.myId) continue;   // ← FIX: bỏ mình
-  gameState.players.set(id, { x: p.x, y: p.y, dir: p.dir, name: p.name || id });
-}
-      // Load shared state
+      // Load danh sách players (BỎ chính mình)
+      gameState.players.clear();
+      for (const [id, p] of Object.entries(msg.players)) {
+        if (id === gameState.myId) continue;
+        gameState.players.set(id, {
+          x: p.x, y: p.y, dir: p.dir,
+          name: p.name || id,
+          dead: !!p.dead,
+          displayX: p.x, displayY: p.y,
+        });
+      }
+
+      // Shared state
       sharedState.doorLocked = msg.state.doorLocked;
       sharedState.breakerOn = msg.state.breakerOn;
 
+      // Killer state
+      if (msg.killer) {
+        killer.x = msg.killer.x;
+        killer.y = msg.killer.y;
+        killer.displayX = msg.killer.x;
+        killer.displayY = msg.killer.y;
+        killer.dir = msg.killer.dir;
+        killer.state = msg.killer.state;
+        killer.visible = true;
+      }
+
+      // Game state
+      gameState.gameTime = msg.gameTime || 0;
+      gameState.running = msg.running || false;
+
       document.getElementById('myId').textContent = '[' + msg.id + ']';
       updatePlayerCountUI();
-      console.log('[WS] Welcome:', msg.id, msg.players);
+      console.log('[WS] Welcome:', msg.id);
       break;
 
-case 'state':
-  for (const [id, p] of Object.entries(msg.players)) {
-    if (id === gameState.myId) {
-      // Chỉ lưu server pos — KHÔNG thêm vào players Map
-      gameState.serverPos.x = p.x;
-      gameState.serverPos.y = p.y;
-      gameState.serverPos.dir = p.dir;
-    } else {
-      const existing = gameState.players.get(id);
-      if (existing) {
-        existing.x = p.x;
-        existing.y = p.y;
-        existing.dir = p.dir;
-        if (p.name) existing.name = p.name;
-      } else {
-        gameState.players.set(id, { x: p.x, y: p.y, dir: p.dir, name: p.name || id });
+    case 'state':
+      for (const [id, p] of Object.entries(msg.players)) {
+        if (id === gameState.myId) {
+          gameState.serverPos.x = p.x;
+          gameState.serverPos.y = p.y;
+          gameState.serverPos.dir = p.dir;
+          if (p.dead) gameState.dead = true;
+        } else {
+          const existing = gameState.players.get(id);
+          if (existing) {
+            existing.x = p.x;
+            existing.y = p.y;
+            existing.dir = p.dir;
+            existing.dead = !!p.dead;
+            if (p.name) existing.name = p.name;
+          } else {
+            gameState.players.set(id, {
+              x: p.x, y: p.y, dir: p.dir,
+              name: p.name || id,
+              dead: !!p.dead,
+              displayX: p.x, displayY: p.y,
+            });
+          }
+        }
       }
-    }
-  }
-  updatePlayerCountUI();
-  break;
 
-case 'playerJoined':
-  if (msg.id === gameState.myId) break;   // ← FIX: bỏ mình
-  gameState.players.set(msg.id, {
-    x: msg.player.x, y: msg.player.y, dir: msg.player.dir,
-    name: msg.player.name || msg.id,
-  });
-  updatePlayerCountUI();
-  showNotify(`👋 ${msg.player.name || msg.id} đã vào`);
-  break;
+      // Killer state
+      if (msg.killer) {
+        killer.x = msg.killer.x;
+        killer.y = msg.killer.y;
+        killer.dir = msg.killer.dir;
+        killer.state = msg.killer.state;
+        killer.visible = true;
+      } else {
+        killer.visible = false;
+      }
 
-case 'playerLeft':
-  if (msg.id === gameState.myId) break;
-  gameState.players.delete(msg.id);
-  updatePlayerCountUI();
-  showNotify(`👋 ${msg.id} đã rời`);
-  break;
+      // Game time
+      gameState.gameTime = msg.gameTime || 0;
+      gameState.running = msg.running || false;
+
+      updatePlayerCountUI();
+      break;
+
+    case 'playerJoined':
+      if (msg.id === gameState.myId) break;
+      gameState.players.set(msg.id, {
+        x: msg.player.x, y: msg.player.y, dir: msg.player.dir,
+        name: msg.player.name || msg.id,
+        dead: !!msg.player.dead,
+        displayX: msg.player.x, displayY: msg.player.y,
+      });
+      updatePlayerCountUI();
+      showNotify(`👋 ${msg.player.name || msg.id} đã vào`);
+      break;
+
+    case 'playerLeft':
+      if (msg.id === gameState.myId) break;
+      {
+        const p = gameState.players.get(msg.id);
+        gameState.players.delete(msg.id);
+        updatePlayerCountUI();
+        showNotify(`👋 ${p?.name || msg.id} đã rời`);
+      }
+      break;
 
     case 'doorState':
       sharedState.doorLocked = msg.locked;
@@ -391,18 +510,60 @@ case 'playerLeft':
       }
       playBreaker();
       break;
-  }
-}
 
-function sendWS(msg) {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(msg));
+    case 'gameStart':
+      gameState.running = true;
+      gameState.winner = false;
+      gameState.gameTime = 0;
+      showNotify('🎮 Trò chơi bắt đầu!');
+      break;
+
+    case 'gameWin':
+      gameState.running = false;
+      gameState.winner = true;
+      document.getElementById('winOverlay').classList.add('show');
+      playVictory();
+      break;
+
+    case 'playerDied':
+      if (msg.id === gameState.myId) {
+        gameState.dead = true;
+        gameState.respawnAt = Date.now() + 5000;
+        document.getElementById('deathOverlay').classList.add('show');
+        playDeath();
+      } else {
+        const p = gameState.players.get(msg.id);
+        if (p) p.dead = true;
+        showNotify(`💀 ${p?.name || msg.id} đã chết`);
+      }
+      break;
+
+    case 'playerRespawned':
+      if (msg.id === gameState.myId) {
+        gameState.dead = false;
+        gameState.respawnAt = 0;
+        gameState.myPos.x = msg.x;
+        gameState.myPos.y = msg.y;
+        gameState.serverPos.x = msg.x;
+        gameState.serverPos.y = msg.y;
+        document.getElementById('deathOverlay').classList.remove('show');
+        showNotify('✨ Bạn đã hồi sinh');
+      } else {
+        const p = gameState.players.get(msg.id);
+        if (p) {
+          p.dead = false;
+          p.x = msg.x;
+          p.y = msg.y;
+          p.displayX = msg.x;
+          p.displayY = msg.y;
+        }
+        showNotify(`✨ ${p?.name || msg.id} đã hồi sinh`);
+      }
+      break;
   }
 }
 
 function updatePlayerCountUI() {
-  const count = gameState.players.size + (gameState.myId ? 1 : 0);
-  // players Map chỉ chứa remote, không chứa mình → +1 nếu mình đã join
   const total = gameState.myId ? gameState.players.size + 1 : gameState.players.size;
   document.getElementById('playerCount').textContent = '👥 ' + total;
 }
@@ -467,12 +628,43 @@ function playBeep(freq, duration, type = 'sine', volume = 0.2) {
   } catch (e) {}
 }
 
+function playHeartbeat() {
+  if (!gameState.audioEnabled || !audio.ctx) return;
+  playBeep(80, 0.12, 'sine', 0.35);
+  setTimeout(() => playBeep(70, 0.15, 'sine', 0.3), 150);
+}
+
+function playDeath() {
+  if (!gameState.audioEnabled || !audio.ctx) return;
+  try {
+    const osc = audio.ctx.createOscillator();
+    const gain = audio.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(200, audio.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(40, audio.ctx.currentTime + 1.5);
+    gain.gain.setValueAtTime(0.4, audio.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audio.ctx.currentTime + 1.5);
+    osc.connect(gain);
+    gain.connect(audio.masterGain);
+    osc.start();
+    osc.stop(audio.ctx.currentTime + 1.5);
+  } catch (e) {}
+}
+
+function playVictory() {
+  if (!gameState.audioEnabled || !audio.ctx) return;
+  const notes = [523, 659, 784];
+  notes.forEach((f, i) => {
+    setTimeout(() => playBeep(f, 0.4, 'triangle', 0.25), i * 200);
+  });
+}
+
 function playClick() { playBeep(1200, 0.05, 'square', 0.15); }
 function playPickup() { playBeep(1500, 0.1, 'sine', 0.2); }
 function playDoorLock() { playBeep(800, 0.08, 'square', 0.15); }
 function playBreaker() { playBeep(600, 0.1, 'square', 0.2); }
 
-// ==================== START/END SCREEN ====================
+// ==================== START SCREEN ====================
 const startScreen = document.getElementById('startScreen');
 const btnStart = document.getElementById('btnStart');
 const audioToggle = document.getElementById('audioToggle');
@@ -490,6 +682,15 @@ function startGame(e) {
   gameState.myName = nameInput.value.trim() || 'Player';
   gameState.started = true;
   startScreen.classList.add('hidden');
+
+  // Gửi name ngay
+  sendWS({
+    type: 'input',
+    x: gameState.myPos.x,
+    y: gameState.myPos.y,
+    dir: gameState.myPos.dir,
+    name: gameState.myName,
+  });
 }
 
 btnStart.addEventListener('touchstart', startGame);
@@ -506,13 +707,36 @@ function toggleAudio(e) {
 audioToggle.addEventListener('touchstart', toggleAudio);
 audioToggle.addEventListener('click', toggleAudio);
 
-// Power object (dùng cho hiệu ứng điện — sẽ sync sau)
-const power = {
-  flicker: 0,
-  flickerTimer: 0,
-  dimFactor: 1.0,
-  targetDim: 1.0,
-};
+// ==================== CLOCK ====================
+const clockEl = document.getElementById('clock');
+const respawnCountdownEl = document.getElementById('respawnCountdown');
+
+function formatTime(seconds) {
+  const hh = Math.floor(seconds / 3600);
+  const mm = Math.floor((seconds % 3600) / 60);
+  const gameHH = Math.min(7, hh);
+  const gameMM = Math.floor(mm);
+  return String(gameHH).padStart(2, '0') + ':' + String(gameMM).padStart(2, '0');
+}
+
+function updateClock() {
+  const elapsed = gameState.gameTime;
+  const gameSeconds = elapsed * 60;
+  clockEl.textContent = formatTime(gameSeconds);
+
+  const remaining = gameState.gameDuration - gameState.gameTime;
+  if (remaining < 60 && remaining > 0) {
+    clockEl.classList.add('near-dawn');
+  } else {
+    clockEl.classList.remove('near-dawn');
+  }
+}
+
+function updateRespawnCountdown() {
+  if (!gameState.dead) return;
+  const remaining = Math.max(0, Math.ceil((gameState.respawnAt - Date.now()) / 1000));
+  respawnCountdownEl.textContent = remaining;
+}
 
 // Kết nối WS ngay khi load
 connectWS();
@@ -546,11 +770,7 @@ let shedX = 0, shedY = 0;
   shedY = Math.max(2, Math.min(MAP_H - SHED.h - 2, shedY));
 }
 const shedDoor = { gx: shedX + 1, gy: shedY };
-
-const breaker = {
-  gx: shedX + 1,
-  gy: shedY + 1,
-};
+const breaker = { gx: shedX + 1, gy: shedY + 1 };
 
 // -------- WALL --------
 function isHouseWall(gx, gy) {
@@ -609,6 +829,7 @@ function isInsideShed(gx, gy) {
          gy >= shedY && gy < shedY + SHED.h;
 }
 
+// -------- FURNITURE --------
 const furniture = [
   { gx: HOUSE.x + 4, gy: HOUSE.y + 2, gw: 3, gh: 1, type: 'table', solid: true },
   { gx: HOUSE.x + 3, gy: HOUSE.y + 2, gw: 1, gh: 1, type: 'chair', solid: true },
@@ -625,6 +846,7 @@ function isFurniture(gx, gy) {
   return false;
 }
 
+// -------- LIGHTS --------
 const lights = [
   { x: (HOUSE.x + HOUSE.w / 2) * TILE,
     y: (HOUSE.y + MID_Y) / 2 * TILE + TILE / 2,
@@ -634,7 +856,7 @@ const lights = [
     radius: 180, intensity: 0.55 },
 ];
 
-// Items — mỗi client có bản riêng (v0.9a chưa sync)
+// -------- ITEMS (local per player) --------
 const ITEMS = [
   {
     id: 'flashlight', icon: '🔦',
@@ -775,7 +997,7 @@ bgCanvas.height = WORLD_H;
     }
   }
 }
-// ==================== PLAYER LOCAL ====================
+// ==================== PLAYER ====================
 const player = {
   r: 12,
   speed: 4.2,
@@ -783,10 +1005,7 @@ const player = {
   spawnY: (HOUSE.y + 1.5) * TILE,
 };
 
-// Vị trí hiện tại — dùng gameState.myPos đã có
-// gameState.myPos = { x, y, dir }
-
-// ==================== INVENTORY (local) ====================
+// ==================== INVENTORY ====================
 const inventory = {
   flashlight: false,
   key: false,
@@ -858,7 +1077,6 @@ let doorInRange = false;
 
 doorBtn.addEventListener('touchstart', (e) => {
   if (!doorInRange) return;
-  // Gửi lên server — server sẽ broadcast lại cho tất cả
   sendWS({ type: 'doorToggle', locked: !sharedState.doorLocked });
   e.preventDefault();
 }, { passive:false });
@@ -870,7 +1088,6 @@ let breakerInRange = false;
 
 breakerBtn.addEventListener('touchstart', (e) => {
   if (!breakerInRange) return;
-  // Gửi lên server
   sendWS({ type: 'breakerToggle', on: !sharedState.breakerOn });
   e.preventDefault();
 }, { passive:false });
@@ -943,38 +1160,18 @@ function moveLocalPlayer(dx, dy) {
   if (!isBlocked(pos.x, pos.y + dy, r)) pos.y += dy;
 }
 
-// ==================== SPAWN POSITION ====================
-// Khi server gửi welcome → cập nhật myPos
-// Nhưng có thể spawn trúng tường → tìm ô trống gần nhất
-function findFreeSpot(px, py) {
-  const gx0 = Math.floor(px / TILE);
-  const gy0 = Math.floor(py / TILE);
-  for (let r = 0; r < 15; r++) {
-    for (let dy = -r; dy <= r; dy++) {
-      for (let dx = -r; dx <= r; dx++) {
-        const gx = gx0 + dx, gy = gy0 + dy;
-        if (gx < 0 || gx >= MAP_W || gy < 0 || gy >= MAP_H) continue;
-        if (isWall(gx, gy) || isFurniture(gx, gy)) continue;
-        return { x: gx * TILE + TILE / 2, y: gy * TILE + TILE / 2 };
-      }
-    }
-  }
-  return { x: px, y: py };
-}
-
 // ==================== CAMERA ====================
 const camera = { x: 0, y: 0 };
 
 // ==================== NETWORK SYNC ====================
-// Gửi input lên server mỗi 50ms (20 FPS)
 let lastSentX = 0;
 let lastSentY = 0;
 let lastSentDir = 0;
 
 setInterval(() => {
   if (!gameState.started || !gameState.connected) return;
+  if (gameState.dead) return;
   const pos = gameState.myPos;
-  // Chỉ gửi khi có thay đổi (giảm bandwidth)
   if (Math.abs(pos.x - lastSentX) < 0.5 &&
       Math.abs(pos.y - lastSentY) < 0.5 &&
       Math.abs(pos.dir - lastSentDir) < 0.01) return;
@@ -998,9 +1195,12 @@ const posInfo = document.getElementById('posInfo');
 function update(dt) {
   if (!gameState.started) return;
 
+  updateClock();
+  updateRespawnCountdown();
+
   const dtSec = dt / 1000;
 
-  // Hiệu ứng điện (local — sync qua sharedState.breakerOn)
+  // Hiệu ứng điện
   if (!sharedState.breakerOn) {
     power.targetDim = 0;
   } else {
@@ -1027,43 +1227,45 @@ function update(dt) {
     }
   }
 
-  // Di chuyển local player (predict — mượt mà không chờ server)
-  const jx = joyDelta.x / JOY_RADIUS;
-  const jy = joyDelta.y / JOY_RADIUS;
-  const len = Math.hypot(jx, jy);
+  // Di chuyển player (nếu không chết)
+  if (!gameState.dead) {
+    const jx = joyDelta.x / JOY_RADIUS;
+    const jy = joyDelta.y / JOY_RADIUS;
+    const len = Math.hypot(jx, jy);
 
-  if (len > 0.15) {
-    const nx = jx / Math.max(1, len);
-    const ny = jy / Math.max(1, len);
-    const move = player.speed * (dt / 16.67);
-    moveLocalPlayer(nx * move, ny * move);
-    gameState.myPos.dir = Math.atan2(ny, nx);
+    if (len > 0.15) {
+      const nx = jx / Math.max(1, len);
+      const ny = jy / Math.max(1, len);
+      const move = player.speed * (dt / 16.67);
+      moveLocalPlayer(nx * move, ny * move);
+      gameState.myPos.dir = Math.atan2(ny, nx);
+    }
   }
 
-  // ==== SMOOTH CORRECTION ====
-  // Nếu server pos khác local pos đáng kể → kéo về từ từ
+  // Smooth correction
   const lerp = 0.15;
   const diffX = gameState.serverPos.x - gameState.myPos.x;
   const diffY = gameState.serverPos.y - gameState.myPos.y;
   const diffDist = Math.hypot(diffX, diffY);
-
-  // Chỉ correct khi lệch > 30px (tránh jitter khi đi bình thường)
   if (diffDist > 30) {
     gameState.myPos.x += diffX * lerp;
     gameState.myPos.y += diffY * lerp;
   }
 
-  // Remote players — smooth interpolation
+  // Remote players smooth
   for (const [id, p] of gameState.players.entries()) {
-    // p đã là vị trí server gửi, không cần lerp vì server update 20 FPS
-    // Nhưng có thể thêm lerp nếu muốn mượt hơn
-    // p.displayX = p.displayX + (p.x - p.displayX) * 0.3
     if (p.displayX === undefined) { p.displayX = p.x; p.displayY = p.y; }
     p.displayX += (p.x - p.displayX) * 0.3;
     p.displayY += (p.y - p.displayY) * 0.3;
   }
 
-  // Camera theo local player
+  // Killer smooth
+  if (killer.visible) {
+    killer.displayX += (killer.x - killer.displayX) * 0.3;
+    killer.displayY += (killer.y - killer.displayY) * 0.3;
+  }
+
+  // Camera
   camera.x += (gameState.myPos.x - camera.x) * 0.15;
   camera.y += (gameState.myPos.y - camera.y) * 0.15;
   const halfW = W / 2, halfH = H / 2;
@@ -1083,14 +1285,14 @@ function update(dt) {
       nearestItem = it;
     }
   }
-  if (nearestItem) pickupBtn.classList.add('show');
+  if (nearestItem && !gameState.dead) pickupBtn.classList.add('show');
   else pickupBtn.classList.remove('show');
 
   // Cửa
   const doorCX = DOOR_MID_X * TILE + TILE / 2;
   const doorCY = MID_Y * TILE + TILE / 2;
   const distToDoor = Math.hypot(doorCX - gameState.myPos.x, doorCY - gameState.myPos.y);
-  doorInRange = (distToDoor < 1.5 * TILE) && (inventory.equipped === 'key');
+  doorInRange = (distToDoor < 1.5 * TILE) && (inventory.equipped === 'key') && !gameState.dead;
 
   const offX = -camera.x + W / 2;
   const offY = -camera.y + H / 2;
@@ -1108,7 +1310,7 @@ function update(dt) {
   const brCX = breaker.gx * TILE + TILE / 2;
   const brCY = breaker.gy * TILE + TILE / 2;
   const distToBr = Math.hypot(brCX - gameState.myPos.x, brCY - gameState.myPos.y);
-  breakerInRange = (distToBr < 1.5 * TILE);
+  breakerInRange = (distToBr < 1.5 * TILE) && !gameState.dead;
 
   if (breakerInRange) {
     breakerBtn.style.left = (brCX + offX) + 'px';
@@ -1171,9 +1373,8 @@ function drawPlayer(px, py, dir) {
 }
 
 // ==================== DRAW: REMOTE PLAYER ====================
-// Remote player: vuông trắng, mặt xanh dương, có tên trên đầu
 function drawRemotePlayer(px, py, dir, name) {
-  const s = 24;   // nhỏ hơn local chút
+  const s = 24;
   ctx.save();
   ctx.translate(px, py);
 
@@ -1212,14 +1413,86 @@ function drawRemotePlayer(px, py, dir, name) {
     ctx.font = 'bold 11px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
-    // Nền đen mờ
     const textWidth = ctx.measureText(name).width;
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
     ctx.fillRect(-textWidth/2 - 4, -s/2 - 16, textWidth + 8, 14);
-    // Chữ trắng
     ctx.fillStyle = '#ffffff';
     ctx.fillText(name, 0, -s/2 - 4);
   }
+
+  ctx.restore();
+}
+
+// ==================== DRAW: KILLER ====================
+function drawKiller(px, py, dir, state) {
+  const s = 24;
+  const chasing = (state === 'CHASE');
+  const investigating = (state === 'INVESTIGATE' || state === 'SABOTAGE');
+
+  ctx.save();
+  ctx.translate(px, py);
+
+  // Thân vuông trắng
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(-s/2, -s/2, s, s);
+  ctx.strokeStyle = chasing ? '#000000' : '#333333';
+  ctx.lineWidth = chasing ? 2 : 1.5;
+  ctx.strokeRect(-s/2, -s/2, s, s);
+
+  // Aura đỏ khi CHASE
+  if (chasing) {
+    const pulse = 0.3 + 0.2 * Math.sin(performance.now() / 150);
+    ctx.strokeStyle = `rgba(255,0,0,${pulse})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, s * 0.9, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // Aura vàng khi INVESTIGATE/SABOTAGE
+  if (investigating) {
+    ctx.strokeStyle = `rgba(255,180,0,0.4)`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, s * 0.85, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // Mắt đỏ
+  ctx.fillStyle = '#ff2020';
+  ctx.beginPath(); ctx.arc(-4, -3, 2.2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc( 4, -3, 2.2, 0, Math.PI * 2); ctx.fill();
+
+  // Miệng cười đỏ
+  ctx.beginPath();
+  ctx.arc(0, 2, 6, 0.15 * Math.PI, 0.85 * Math.PI);
+  ctx.strokeStyle = '#ff2020';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Mũi tên hướng
+  ctx.rotate(dir);
+  ctx.beginPath();
+  ctx.moveTo(s/2 + 2, 0);
+  ctx.lineTo(s/2 - 2, -4);
+  ctx.lineTo(s/2 - 2, 4);
+  ctx.closePath();
+  ctx.fillStyle = '#ff2020';
+  ctx.fill();
+
+  // Dao
+  ctx.rotate(-dir);
+  const knifeAngle = dir + Math.PI * 0.35;
+  const kx = Math.cos(knifeAngle) * s * 0.7;
+  const ky = Math.sin(knifeAngle) * s * 0.7;
+  ctx.save();
+  ctx.translate(kx, ky);
+  ctx.rotate(knifeAngle + Math.PI / 2);
+  ctx.font = '14px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('🔪', 0, 0);
+  ctx.restore();
 
   ctx.restore();
 }
@@ -1290,7 +1563,7 @@ function drawBreaker() {
   ctx.restore();
 }
 
-// ==================== FLASHLIGHT POLYGON ====================
+// ==================== FLASHLIGHT ====================
 function buildFlashlightPolygon(offX, offY) {
   const px = gameState.myPos.x + offX;
   const py = gameState.myPos.y + offY;
@@ -1310,6 +1583,7 @@ function buildFlashlightPolygon(offX, offY) {
 
 function carveFlashlight(dctx, offX, offY) {
   if (!inventory.flashlightOn || inventory.equipped !== 'flashlight') return;
+  if (gameState.dead) return;
 
   const { pts, range, px, py } = buildFlashlightPolygon(offX, offY);
 
@@ -1331,6 +1605,7 @@ function carveFlashlight(dctx, offX, offY) {
 
   dctx.restore();
 }
+
 // ==================== RENDER ====================
 function render() {
   ctx.fillStyle = '#000';
@@ -1344,7 +1619,7 @@ function render() {
   ctx.save();
   ctx.translate(offX, offY);
 
-  // Background (map + tường + nội thất)
+  // Background
   ctx.drawImage(bgCanvas, 0, 0);
 
   // Cửa + cầu dao
@@ -1375,16 +1650,24 @@ function render() {
   ctx.lineWidth = 4;
   ctx.strokeRect(0, 0, WORLD_W, WORLD_H);
 
-  // Remote players (vẽ trước local để local luôn trên)
+  // Killer
+  if (killer.visible) {
+    drawKiller(killer.displayX, killer.displayY, killer.dir, killer.state);
+  }
+
+  // Remote players (không vẽ nếu chết)
   for (const [id, p] of gameState.players.entries()) {
+    if (p.dead) continue;
     const dx = p.displayX !== undefined ? p.displayX : p.x;
     const dy = p.displayY !== undefined ? p.displayY : p.y;
     drawRemotePlayer(dx, dy, p.dir, p.name || id);
   }
 
-  // Local player
-  drawPlayer(gameState.myPos.x, gameState.myPos.y, gameState.myPos.dir);
-  drawEquippedItem(gameState.myPos.x, gameState.myPos.y, gameState.myPos.dir);
+  // Local player (không vẽ nếu chết)
+  if (!gameState.dead) {
+    drawPlayer(gameState.myPos.x, gameState.myPos.y, gameState.myPos.dir);
+    drawEquippedItem(gameState.myPos.x, gameState.myPos.y, gameState.myPos.dir);
+  }
 
   ctx.restore();
 
@@ -1456,7 +1739,7 @@ function render() {
     dctx.fill();
   }
 
-  // Đèn pin — chỉ cho local player (chưa sync cho remote ở v0.9a)
+  // Đèn pin
   carveFlashlight(dctx, offX, offY);
 
   ctx.drawImage(darkLayer, 0, 0);
@@ -1480,7 +1763,7 @@ function render() {
     }
   }
 
-  if (inventory.flashlightOn && inventory.equipped === 'flashlight') {
+  if (inventory.flashlightOn && inventory.equipped === 'flashlight' && !gameState.dead) {
     const { pts, range, px, py } = buildFlashlightPolygon(offX, offY);
     ctx.save();
     ctx.beginPath();
