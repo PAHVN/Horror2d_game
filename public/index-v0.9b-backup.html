@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>Horror 2D Multiplayer v0.9c</title>
+<title>Horror 2D Multiplayer v0.9b</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent; }
   html, body { width:100%; height:100%; overflow:hidden; background:#000; font-family:sans-serif; color:#fff; }
@@ -104,25 +104,12 @@
   }
   .invSlot.empty { display:none; }
 
-#hud {
-  position:fixed; top:10px; left:10px; color:#fff;
-  font-size:12px; text-shadow:1px 1px 2px #000; z-index:10;
-  background:rgba(0,0,0,0.4); padding:6px 10px; border-radius:6px;
-  line-height:1.4;
-  transition:background 0.2s;
-}
-#hud.stun {
-  background:rgba(255,255,100,0.4);
-  animation:hudPulse 0.4s infinite alternate;
-}
-#hud.flee {
-  background:rgba(255,136,0,0.4);
-  animation:hudPulse 0.4s infinite alternate;
-}
-@keyframes hudPulse {
-  from { opacity:0.7; }
-  to   { opacity:1; }
-}
+  #hud {
+    position:fixed; top:10px; left:10px; color:#fff;
+    font-size:12px; text-shadow:1px 1px 2px #000; z-index:10;
+    background:rgba(0,0,0,0.4); padding:6px 10px; border-radius:6px;
+    line-height:1.4;
+  }
 
   #playerCount {
     position:fixed; top:10px; left:50%;
@@ -170,13 +157,7 @@
     from { opacity:1; }
     to { opacity:0.35; }
   }
-#stunFlash {
-  position:fixed; inset:0;
-  background:#ffffff;
-  opacity:0; pointer-events:none;
-  z-index:45; transition:opacity 0.2s;
-}
-#stunFlash.show { opacity:0.35; }
+
   #pickupBtn {
     position:fixed; right:15px; top:50%;
     transform:translateY(-50%);
@@ -220,8 +201,6 @@
     border-radius:8px; letter-spacing:1px;
     z-index:20; display:none;
     text-shadow:1px 1px 2px #000;
-    text-align:center;
-    max-width:80vw;
   }
   #notify.show { display:block; animation:notifyFade 2s forwards; }
   @keyframes notifyFade {
@@ -248,7 +227,7 @@
 <body>
 <canvas id="game"></canvas>
 
-<div id="hud">v0.9c <span id="myId"></span><br><span id="posInfo">...</span></div>
+<div id="hud">v0.9b <span id="myId"></span><br><span id="posInfo">...</span></div>
 <div id="playerCount">👥 1</div>
 <div id="clock">00:00</div>
 <div id="powerAlert">⚠️ MẤT ĐIỆN</div>
@@ -264,7 +243,7 @@
 
 <div id="heartbeat"></div>
 <div id="notify"></div>
-<div id="stunFlash"></div>
+
 <div id="deathOverlay" class="endScreen">
   <div class="endTitle" style="color:#ff3333;">💀 BẠN ĐÃ CHẾT</div>
   <div class="endInfo">Hồi sinh sau <strong id="respawnCountdown">5</strong>s...</div>
@@ -327,19 +306,12 @@ const sharedState = {
   breakerOn: true,
 };
 
-// ==================== KILLER (client view) ====================
+// ==================== KILLER OBJECT (client) ====================
 const killer = {
   x: 0, y: 0, dir: 0,
   state: 'WANDER',
   displayX: 0, displayY: 0,
   visible: false,
-  // Stun state
-  stunState: 'NORMAL',      // 'NORMAL' | 'SLOWED' | 'STUNNED' | 'FLEEING'
-  stunTimer: 0,
-  immuneTimer: 0,
-  lightCount: 0,
-  prevStunState: 'NORMAL',
-  prevLightCount: 0,
 };
 
 // ==================== POWER (visual effect) ====================
@@ -349,33 +321,6 @@ const power = {
   dimFactor: 1.0,
   targetDim: 1.0,
 };
-
-// ==================== ITEMS (sync server) ====================
-// Mảng này được server cập nhật mỗi state broadcast
-const ITEMS = [
-  {
-    id: 'flashlight',
-    icon: '🔦',
-    x: 0, y: 0,        // server cập nhật
-    infinite: true,
-    pickedByMe: false, // mình đã nhặt chưa
-    pickedBy: [],      // mảng player IDs đã nhặt (infinite)
-    picked: false,     // cho non-infinite
-  },
-  {
-    id: 'key',
-    icon: '🔑',
-    x: 0, y: 0,
-    infinite: false,
-    pickedByMe: false,
-    pickedBy: null,
-    picked: false,
-  },
-];
-
-function findItem(id) {
-  return ITEMS.find(it => it.id === id);
-}
 
 // ==================== WEBSOCKET CLIENT ====================
 const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
@@ -430,30 +375,6 @@ function sendWS(msg) {
   }
 }
 
-// ==================== SYNC ITEMS TỪ SERVER ====================
-function applyItemsFromServer(serverItems) {
-  if (!serverItems) return;
-  for (const si of serverItems) {
-    const local = findItem(si.id);
-    if (!local) continue;
-
-    local.x = si.x;
-    local.y = si.y;
-    local.infinite = si.infinite;
-
-    if (si.infinite) {
-      // Đèn pin — check mình đã nhặt chưa
-      const arr = Array.isArray(si.pickedBy) ? si.pickedBy : [];
-      local.pickedByMe = arr.includes(gameState.myId);
-      local.pickedBy = arr;
-    } else {
-      // Chìa khóa
-      local.picked = !!si.picked;
-      local.pickedByMe = (si.pickedBy === gameState.myId);
-    }
-  }
-}
-
 // ==================== MESSAGE HANDLER ====================
 function handleMessage(msg) {
   switch (msg.type) {
@@ -468,7 +389,7 @@ function handleMessage(msg) {
         gameState.serverPos.dir = msg.players[msg.id].dir;
       }
 
-      // Load players (BỎ chính mình)
+      // Load danh sách players (BỎ chính mình)
       gameState.players.clear();
       for (const [id, p] of Object.entries(msg.players)) {
         if (id === gameState.myId) continue;
@@ -476,8 +397,6 @@ function handleMessage(msg) {
           x: p.x, y: p.y, dir: p.dir,
           name: p.name || id,
           dead: !!p.dead,
-          equipped: p.equipped || null,
-          flashlightOn: !!p.flashlightOn,
           displayX: p.x, displayY: p.y,
         });
       }
@@ -486,24 +405,18 @@ function handleMessage(msg) {
       sharedState.doorLocked = msg.state.doorLocked;
       sharedState.breakerOn = msg.state.breakerOn;
 
-      // Items
-      applyItemsFromServer(msg.items);
+      // Killer state
+      if (msg.killer) {
+        killer.x = msg.killer.x;
+        killer.y = msg.killer.y;
+        killer.displayX = msg.killer.x;
+        killer.displayY = msg.killer.y;
+        killer.dir = msg.killer.dir;
+        killer.state = msg.killer.state;
+        killer.visible = true;
+      }
 
-// Killer
-if (msg.killer) {
-  killer.x = msg.killer.x;
-  killer.y = msg.killer.y;
-  killer.displayX = msg.killer.x;
-  killer.displayY = msg.killer.y;
-  killer.dir = msg.killer.dir;
-  killer.state = msg.killer.state;
-  killer.stunState = msg.killer.stunState || 'NORMAL';
-  killer.stunTimer = msg.killer.stunTimer || 0;
-  killer.immuneTimer = msg.killer.immuneTimer || 0;
-  killer.lightCount = msg.killer.lightCount || 0;
-  killer.visible = true;
-}
-
+      // Game state
       gameState.gameTime = msg.gameTime || 0;
       gameState.running = msg.running || false;
 
@@ -526,40 +439,30 @@ if (msg.killer) {
             existing.y = p.y;
             existing.dir = p.dir;
             existing.dead = !!p.dead;
-            existing.equipped = p.equipped || null;
-            existing.flashlightOn = !!p.flashlightOn;
             if (p.name) existing.name = p.name;
           } else {
             gameState.players.set(id, {
               x: p.x, y: p.y, dir: p.dir,
               name: p.name || id,
               dead: !!p.dead,
-              equipped: p.equipped || null,
-              flashlightOn: !!p.flashlightOn,
               displayX: p.x, displayY: p.y,
             });
           }
         }
       }
 
-// Killer
-if (msg.killer) {
-  killer.x = msg.killer.x;
-  killer.y = msg.killer.y;
-  killer.dir = msg.killer.dir;
-  killer.state = msg.killer.state;
-  killer.stunState = msg.killer.stunState || 'NORMAL';
-  killer.stunTimer = msg.killer.stunTimer || 0;
-  killer.immuneTimer = msg.killer.immuneTimer || 0;
-  killer.lightCount = msg.killer.lightCount || 0;
-  killer.visible = true;
-} else {
-  killer.visible = false;
-}
+      // Killer state
+      if (msg.killer) {
+        killer.x = msg.killer.x;
+        killer.y = msg.killer.y;
+        killer.dir = msg.killer.dir;
+        killer.state = msg.killer.state;
+        killer.visible = true;
+      } else {
+        killer.visible = false;
+      }
 
-      // Items
-      applyItemsFromServer(msg.items);
-
+      // Game time
       gameState.gameTime = msg.gameTime || 0;
       gameState.running = msg.running || false;
 
@@ -572,8 +475,6 @@ if (msg.killer) {
         x: msg.player.x, y: msg.player.y, dir: msg.player.dir,
         name: msg.player.name || msg.id,
         dead: !!msg.player.dead,
-        equipped: msg.player.equipped || null,
-        flashlightOn: !!msg.player.flashlightOn,
         displayX: msg.player.x, displayY: msg.player.y,
       });
       updatePlayerCountUI();
@@ -608,56 +509,6 @@ if (msg.killer) {
         document.getElementById('powerAlert').classList.add('show');
       }
       playBreaker();
-      break;
-
-    case 'itemPicked':
-      // Có ai đó nhặt item
-      {
-        const it = findItem(msg.itemId);
-        if (!it) break;
-        if (it.infinite) {
-          // Đèn pin — vô hạn. Chỉ cập nhật pickedBy
-          const arr = Array.isArray(it.pickedBy) ? it.pickedBy : [];
-          if (!arr.includes(msg.playerId)) arr.push(msg.playerId);
-          it.pickedBy = arr;
-          if (msg.playerId === gameState.myId) {
-            it.pickedByMe = true;
-            playPickup();
-            showNotify('✨ Bạn đã nhặt đèn pin');
-          } else {
-            showNotify(`🔦 ${msg.playerId} đã nhặt đèn pin`);
-          }
-        } else {
-          // Chìa khóa — 1 người
-          it.picked = true;
-          it.pickedBy = msg.playerId;
-          if (msg.playerId === gameState.myId) {
-            it.pickedByMe = true;
-            playPickup();
-            showNotify('✨ Bạn đã nhặt chìa khóa');
-          } else {
-            showNotify(`🔑 ${msg.playerId} đã nhặt chìa khóa`);
-          }
-        }
-      }
-      break;
-
-    case 'itemReset':
-      {
-        const it = findItem(msg.itemId);
-        if (!it) break;
-        it.picked = false;
-        it.pickedBy = null;
-        it.pickedByMe = false;
-        showNotify(`♻️ ${it.icon} đã về lại bàn`);
-      }
-      break;
-
-    case 'pickupFailed':
-      {
-        const it = findItem(msg.itemId);
-        showNotify(`❌ ${it?.icon || ''} đã bị người khác lấy`);
-      }
       break;
 
     case 'gameStart':
@@ -812,27 +663,7 @@ function playClick() { playBeep(1200, 0.05, 'square', 0.15); }
 function playPickup() { playBeep(1500, 0.1, 'sine', 0.2); }
 function playDoorLock() { playBeep(800, 0.08, 'square', 0.15); }
 function playBreaker() { playBeep(600, 0.1, 'square', 0.2); }
-function playStun() {
-  // Tiếng "bùm" chói mắt — 3 nốt tăng dần
-  if (!gameState.audioEnabled || !audio.ctx) return;
-  playBeep(800, 0.15, 'square', 0.3);
-  setTimeout(() => playBeep(1200, 0.15, 'square', 0.3), 60);
-  setTimeout(() => playBeep(1600, 0.25, 'sine', 0.35), 130);
-}
 
-function playFlee() {
-  // Tiếng hoảng — 2 nốt giảm
-  if (!gameState.audioEnabled || !audio.ctx) return;
-  playBeep(900, 0.15, 'sawtooth', 0.25);
-  setTimeout(() => playBeep(500, 0.3, 'sawtooth', 0.25), 150);
-}
-
-function playFleeStop() {
-  // Khi killer hết bỏ chạy
-  if (!gameState.audioEnabled || !audio.ctx) return;
-  playBeep(500, 0.15, 'sine', 0.2);
-  setTimeout(() => playBeep(700, 0.2, 'sine', 0.2), 100);
-}
 // ==================== START SCREEN ====================
 const startScreen = document.getElementById('startScreen');
 const btnStart = document.getElementById('btnStart');
@@ -852,14 +683,13 @@ function startGame(e) {
   gameState.started = true;
   startScreen.classList.add('hidden');
 
+  // Gửi name ngay
   sendWS({
     type: 'input',
     x: gameState.myPos.x,
     y: gameState.myPos.y,
     dir: gameState.myPos.dir,
     name: gameState.myName,
-    equipped: null,
-    flashlightOn: false,
   });
 }
 
@@ -907,56 +737,7 @@ function updateRespawnCountdown() {
   const remaining = Math.max(0, Math.ceil((gameState.respawnAt - Date.now()) / 1000));
   respawnCountdownEl.textContent = remaining;
 }
-// ==================== KILLER STUN FEEDBACK ====================
-function updateKillerFeedback() {
-  if (!killer.visible) {
-    killer.prevStunState = 'NORMAL';
-    killer.prevLightCount = 0;
-    return;
-  }
 
-  const stunState = killer.stunState || 'NORMAL';
-  const lightCount = killer.lightCount || 0;
-
-  // Phát hiện thay đổi state
-  if (stunState !== killer.prevStunState) {
-    // Chuyển sang STUNNED
-    if (stunState === 'STUNNED' && killer.prevStunState !== 'STUNNED') {
-      playStun();
-      showNotify('💥 ĐÃ CHÓI MẮT KILLER!');
-// Chuyển sang STUNNED
-if (stunState === 'STUNNED' && killer.prevStunState !== 'STUNNED') {
-  playStun();
-  showNotify('💥 ĐÃ CHÓI MẮT KILLER!');
-  // Flash trắng màn hình
-  const flash = document.getElementById('stunFlash');
-  flash.classList.add('show');
-  setTimeout(() => flash.classList.remove('show'), 200);
-}
-    }
-    // Chuyển sang FLEEING
-    if (stunState === 'FLEEING' && killer.prevStunState !== 'FLEEING') {
-      playFlee();
-      showNotify('😱 KILLER ĐANG BỎ CHẠY!');
-    }
-    // Hết FLEEING (về NORMAL)
-    if (stunState === 'NORMAL' && killer.prevStunState === 'FLEEING') {
-      playFleeStop();
-    }
-
-    killer.prevStunState = stunState;
-  }
-
-  // Phát hiện số đèn thay đổi đáng kể
-  if (lightCount >= 3 && killer.prevLightCount < 3) {
-    // Vừa đạt 3 đèn
-    if (stunState === 'NORMAL') {
-      showNotify(`🔦 Killer bị chậm (${lightCount} đèn)`);
-    }
-  }
-
-  killer.prevLightCount = lightCount;
-}
 // Kết nối WS ngay khi load
 connectWS();
 // ==================== MAP ====================
@@ -1073,6 +854,26 @@ const lights = [
   { x: (HOUSE.x + HOUSE.w / 2) * TILE,
     y: (MID_Y + HOUSE.y + HOUSE.h) / 2 * TILE + TILE / 2,
     radius: 180, intensity: 0.55 },
+];
+
+// -------- ITEMS (local per player) --------
+const ITEMS = [
+  {
+    id: 'flashlight', icon: '🔦',
+    x: (HOUSE.x + 5) * TILE + TILE / 2,
+    y: (HOUSE.y + 2) * TILE + TILE / 2,
+    picked: false, pickupRange: 1.3 * TILE,
+    spawnX: (HOUSE.x + 5) * TILE + TILE / 2,
+    spawnY: (HOUSE.y + 2) * TILE + TILE / 2,
+  },
+  {
+    id: 'key', icon: '🔑',
+    x: (HOUSE.x + 4) * TILE + TILE / 2,
+    y: (HOUSE.y + 2) * TILE + TILE / 2,
+    picked: false, pickupRange: 1.3 * TILE,
+    spawnX: (HOUSE.x + 4) * TILE + TILE / 2,
+    spawnY: (HOUSE.y + 2) * TILE + TILE / 2,
+  },
 ];
 
 // ==================== MAP TILES ====================
@@ -1226,24 +1027,6 @@ function updateInventoryUI() {
   }
 }
 
-// Sync inventory từ ITEMS (server-authoritative)
-function syncInventoryFromItems() {
-  const fl = findItem('flashlight');
-  const ky = findItem('key');
-  if (fl) inventory.flashlight = fl.pickedByMe;
-  if (ky) inventory.key = ky.pickedByMe;
-
-  // Nếu mất item (do chết hoặc disconnect) → bỏ equipped
-  if (inventory.equipped === 'flashlight' && !inventory.flashlight) {
-    inventory.equipped = null;
-    inventory.flashlightOn = false;
-  }
-  if (inventory.equipped === 'key' && !inventory.key) {
-    inventory.equipped = null;
-  }
-  updateInventoryUI();
-}
-
 document.querySelectorAll('.invSlot').forEach(el => {
   el.addEventListener('touchstart', (e) => {
     const slot = el.dataset.slot;
@@ -1278,9 +1061,13 @@ const pickupBtn = document.getElementById('pickupBtn');
 let nearestItem = null;
 
 pickupBtn.addEventListener('touchstart', (e) => {
-  if (!nearestItem) return;
-  // Gửi request lên server
-  sendWS({ type: 'pickup', itemId: nearestItem.id });
+  if (nearestItem && !nearestItem.picked) {
+    nearestItem.picked = true;
+    if (nearestItem.id === 'flashlight') inventory.flashlight = true;
+    if (nearestItem.id === 'key') inventory.key = true;
+    playPickup();
+    updateInventoryUI();
+  }
   e.preventDefault();
 }, { passive:false });
 
@@ -1380,23 +1167,14 @@ const camera = { x: 0, y: 0 };
 let lastSentX = 0;
 let lastSentY = 0;
 let lastSentDir = 0;
-let lastSentEquipped = undefined;
-let lastSentFlashlight = undefined;
 
 setInterval(() => {
   if (!gameState.started || !gameState.connected) return;
   if (gameState.dead) return;
-
   const pos = gameState.myPos;
-  const eq = inventory.equipped;
-  const fo = inventory.flashlightOn;
-
-  const posChanged = Math.abs(pos.x - lastSentX) >= 0.5 ||
-                     Math.abs(pos.y - lastSentY) >= 0.5 ||
-                     Math.abs(pos.dir - lastSentDir) >= 0.01;
-  const stateChanged = (eq !== lastSentEquipped) || (fo !== lastSentFlashlight);
-
-  if (!posChanged && !stateChanged) return;
+  if (Math.abs(pos.x - lastSentX) < 0.5 &&
+      Math.abs(pos.y - lastSentY) < 0.5 &&
+      Math.abs(pos.dir - lastSentDir) < 0.01) return;
 
   sendWS({
     type: 'input',
@@ -1404,15 +1182,11 @@ setInterval(() => {
     y: pos.y,
     dir: pos.dir,
     name: gameState.myName,
-    equipped: eq || null,
-    flashlightOn: !!fo,
   });
 
   lastSentX = pos.x;
   lastSentY = pos.y;
   lastSentDir = pos.dir;
-  lastSentEquipped = eq;
-  lastSentFlashlight = fo;
 }, 50);
 
 // ==================== UPDATE ====================
@@ -1423,9 +1197,6 @@ function update(dt) {
 
   updateClock();
   updateRespawnCountdown();
-
-  // Sync inventory từ ITEMS mỗi frame (rẻ, chỉ check 2 items)
-  syncInventoryFromItems();
 
   const dtSec = dt / 1000;
 
@@ -1456,7 +1227,7 @@ function update(dt) {
     }
   }
 
-  // Di chuyển player
+  // Di chuyển player (nếu không chết)
   if (!gameState.dead) {
     const jx = joyDelta.x / JOY_RADIUS;
     const jy = joyDelta.y / JOY_RADIUS;
@@ -1488,14 +1259,11 @@ function update(dt) {
     p.displayY += (p.y - p.displayY) * 0.3;
   }
 
-// Killer smooth
-if (killer.visible) {
-  killer.displayX += (killer.x - killer.displayX) * 0.3;
-  killer.displayY += (killer.y - killer.displayY) * 0.3;
-}
-
-// Killer feedback (âm thanh + notify)
-updateKillerFeedback();
+  // Killer smooth
+  if (killer.visible) {
+    killer.displayX += (killer.x - killer.displayX) * 0.3;
+    killer.displayY += (killer.y - killer.displayY) * 0.3;
+  }
 
   // Camera
   camera.x += (gameState.myPos.x - camera.x) * 0.15;
@@ -1506,27 +1274,19 @@ updateKillerFeedback();
   if (WORLD_H > H) camera.y = Math.max(halfH, Math.min(WORLD_H - halfH, camera.y));
   else camera.y = WORLD_H / 2;
 
-  // Item gần nhất — chỉ item mình có thể nhặt
+  // Item gần nhất
   nearestItem = null;
   let bestDist = Infinity;
   for (const it of ITEMS) {
-    // Bỏ qua nếu mình đã nhặt rồi
-    if (it.pickedByMe) continue;
-    // Bỏ qua nếu là non-infinite và đã bị người khác nhặt
-    if (!it.infinite && it.picked) continue;
-
+    if (it.picked) continue;
     const d = Math.hypot(it.x - gameState.myPos.x, it.y - gameState.myPos.y);
-    if (d < 1.3 * TILE && d < bestDist) {
+    if (d < it.pickupRange && d < bestDist) {
       bestDist = d;
       nearestItem = it;
     }
   }
-  if (nearestItem && !gameState.dead) {
-    pickupBtn.textContent = 'NHẶT ' + nearestItem.icon;
-    pickupBtn.classList.add('show');
-  } else {
-    pickupBtn.classList.remove('show');
-  }
+  if (nearestItem && !gameState.dead) pickupBtn.classList.add('show');
+  else pickupBtn.classList.remove('show');
 
   // Cửa
   const doorCX = DOOR_MID_X * TILE + TILE / 2;
@@ -1561,27 +1321,8 @@ updateKillerFeedback();
     breakerBtn.classList.remove('show');
   }
 
-// HUD
-let hudText = `X:${(gameState.myPos.x/TILE).toFixed(1)} Y:${(gameState.myPos.y/TILE).toFixed(1)}`;
-const hudEl = document.getElementById('hud');
-hudEl.classList.remove('stun', 'flee');
-
-if (killer.visible) {
-  if (killer.stunState === 'STUNNED') {
-    hudText += ` | 💥 STUN ${Math.ceil(killer.stunTimer/1000)}s`;
-    hudEl.classList.add('stun');
-  } else if (killer.stunState === 'FLEEING') {
-    hudText += ` | 😱 FLEE ${Math.ceil(killer.stunTimer/1000)}s`;
-    hudEl.classList.add('flee');
-  } else if (killer.immuneTimer > 0) {
-    hudText += ` | 🛡️ IMMUNE ${Math.ceil(killer.immuneTimer/1000)}s`;
-  } else if (killer.lightCount >= 3) {
-    hudText += ` | 🔦 SLOW (${killer.lightCount})`;
-    hudEl.classList.add('stun');
-  }
-}
-
-posInfo.textContent = hudText;
+  // HUD
+  posInfo.textContent = `X:${(gameState.myPos.x/TILE).toFixed(1)} Y:${(gameState.myPos.y/TILE).toFixed(1)}`;
 }
 // ==================== RAYCAST ====================
 function raycast(x0, y0, angle, maxDist) {
@@ -1682,99 +1423,24 @@ function drawRemotePlayer(px, py, dir, name) {
   ctx.restore();
 }
 
-// ==================== DRAW: REMOTE EQUIPPED ITEM ====================
-// Vẽ vật phẩm cầm tay của remote player
-function drawRemoteEquippedItem(px, py, dir, equipped, flashlightOn) {
-  if (!equipped) return;
-  if (equipped === 'flashlight' && !flashlightOn) return;
-  const dist = 12 + 6;
-  const ix = px + Math.cos(dir) * dist;
-  const iy = py + Math.sin(dir) * dist;
-  const icon = equipped === 'flashlight' ? '🔦' : '🔑';
-  ctx.save();
-  ctx.font = '16px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(icon, ix, iy);
-  ctx.restore();
-}
-
 // ==================== DRAW: KILLER ====================
 function drawKiller(px, py, dir, state) {
   const s = 24;
   const chasing = (state === 'CHASE');
   const investigating = (state === 'INVESTIGATE' || state === 'SABOTAGE');
-  const stunned = (killer.stunState === 'STUNNED');
-  const fleeing = (killer.stunState === 'FLEEING');
-  const slowed = (killer.stunState === 'SLOWED' || (killer.lightCount >= 3 && killer.lightCount < 4));
 
   ctx.save();
   ctx.translate(px, py);
 
-  // ==== Hiệu ứng chói mắt (aura trắng) ====
-  if (stunned) {
-    // Choáng mạnh — nhiều vòng sáng xoay
-    const now = performance.now();
-    const pulse = 0.7 + 0.3 * Math.sin(now / 80);
-    
-    // Vòng sáng lớn
-    ctx.save();
-    ctx.strokeStyle = `rgba(255,255,200,${pulse * 0.8})`;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(0, 0, s * 1.4, 0, Math.PI * 2);
-    ctx.stroke();
-    
-    // Vòng xoay 1
-    ctx.rotate(now / 200);
-    for (let i = 0; i < 6; i++) {
-      ctx.rotate(Math.PI / 3);
-      ctx.beginPath();
-      ctx.moveTo(s * 0.7, 0);
-      ctx.lineTo(s * 1.3, 0);
-      ctx.strokeStyle = `rgba(255,255,220,${pulse * 0.9})`;
-      ctx.lineWidth = 2.5;
-      ctx.stroke();
-    }
-    ctx.restore();
-    
-    // Sao sáng
-    ctx.save();
-    ctx.rotate(-now / 150);
-    ctx.fillStyle = `rgba(255,255,180,${pulse})`;
-    for (let i = 0; i < 4; i++) {
-      ctx.rotate(Math.PI / 2);
-      ctx.beginPath();
-      ctx.arc(s * 1.5, 0, 3, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
-  } else if (fleeing) {
-    // Bỏ chạy — aura đỏ-cam nhấp nháy
-    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 100);
-    ctx.strokeStyle = `rgba(255,100,0,${pulse * 0.7})`;
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.arc(0, 0, s * 1.2, 0, Math.PI * 2);
-    ctx.stroke();
-  } else if (slowed) {
-    // Chậm — aura vàng nhạt
-    ctx.strokeStyle = `rgba(255,220,100,0.5)`;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(0, 0, s * 1.1, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  // ==== Thân killer ====
+  // Thân vuông trắng
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(-s/2, -s/2, s, s);
   ctx.strokeStyle = chasing ? '#000000' : '#333333';
   ctx.lineWidth = chasing ? 2 : 1.5;
   ctx.strokeRect(-s/2, -s/2, s, s);
 
-  // Aura đỏ khi CHASE (chỉ khi không bị stun)
-  if (chasing && !stunned && !fleeing) {
+  // Aura đỏ khi CHASE
+  if (chasing) {
     const pulse = 0.3 + 0.2 * Math.sin(performance.now() / 150);
     ctx.strokeStyle = `rgba(255,0,0,${pulse})`;
     ctx.lineWidth = 2;
@@ -1784,7 +1450,7 @@ function drawKiller(px, py, dir, state) {
   }
 
   // Aura vàng khi INVESTIGATE/SABOTAGE
-  if (investigating && !stunned && !fleeing && !slowed) {
+  if (investigating) {
     ctx.strokeStyle = `rgba(255,180,0,0.4)`;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
@@ -1792,148 +1458,46 @@ function drawKiller(px, py, dir, state) {
     ctx.stroke();
   }
 
-  // ==== Mắt ====
-  if (stunned) {
-    // Mắt X_X khi choáng
-    ctx.strokeStyle = '#ff2020';
-    ctx.lineWidth = 2;
-    // Mắt trái X
-    ctx.beginPath();
-    ctx.moveTo(-6, -5); ctx.lineTo(-2, -1);
-    ctx.moveTo(-2, -5); ctx.lineTo(-6, -1);
-    ctx.stroke();
-    // Mắt phải X
-    ctx.beginPath();
-    ctx.moveTo(2, -5); ctx.lineTo(6, -1);
-    ctx.moveTo(6, -5); ctx.lineTo(2, -1);
-    ctx.stroke();
-  } else if (fleeing) {
-    // Mắt mở to hoảng sợ
-    ctx.fillStyle = '#ff2020';
-    ctx.beginPath(); ctx.arc(-4, -3, 3, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc( 4, -3, 3, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#000';
-    ctx.beginPath(); ctx.arc(-4, -3, 1, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc( 4, -3, 1, 0, Math.PI * 2); ctx.fill();
-  } else {
-    ctx.fillStyle = '#ff2020';
-    ctx.beginPath(); ctx.arc(-4, -3, 2.2, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc( 4, -3, 2.2, 0, Math.PI * 2); ctx.fill();
-  }
+  // Mắt đỏ
+  ctx.fillStyle = '#ff2020';
+  ctx.beginPath(); ctx.arc(-4, -3, 2.2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc( 4, -3, 2.2, 0, Math.PI * 2); ctx.fill();
 
-  // ==== Miệng ====
-  if (stunned) {
-    // Miệng O khi choáng
-    ctx.beginPath();
-    ctx.arc(0, 3, 3, 0, Math.PI * 2);
-    ctx.strokeStyle = '#ff2020';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-  } else if (fleeing) {
-    // Miệng mếu
-    ctx.beginPath();
-    ctx.arc(0, 6, 4, Math.PI + 0.3, Math.PI * 2 - 0.3);
-    ctx.strokeStyle = '#ff2020';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-  } else {
-    // Cười đểu bình thường
-    ctx.beginPath();
-    ctx.arc(0, 2, 6, 0.15 * Math.PI, 0.85 * Math.PI);
-    ctx.strokeStyle = '#ff2020';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-  }
+  // Miệng cười đỏ
+  ctx.beginPath();
+  ctx.arc(0, 2, 6, 0.15 * Math.PI, 0.85 * Math.PI);
+  ctx.strokeStyle = '#ff2020';
+  ctx.lineWidth = 2;
+  ctx.stroke();
 
-  // ==== Mũi tên hướng ====
+  // Mũi tên hướng
   ctx.rotate(dir);
   ctx.beginPath();
   ctx.moveTo(s/2 + 2, 0);
   ctx.lineTo(s/2 - 2, -4);
   ctx.lineTo(s/2 - 2, 4);
   ctx.closePath();
-  ctx.fillStyle = fleeing ? '#ff8800' : '#ff2020';
+  ctx.fillStyle = '#ff2020';
   ctx.fill();
 
-  // ==== Dao ====
+  // Dao
   ctx.rotate(-dir);
-  if (!stunned) {
-    const knifeAngle = dir + Math.PI * 0.35;
-    const kx = Math.cos(knifeAngle) * s * 0.7;
-    const ky = Math.sin(knifeAngle) * s * 0.7;
-    ctx.save();
-    ctx.translate(kx, ky);
-    ctx.rotate(knifeAngle + Math.PI / 2);
-    ctx.font = '14px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('🔪', 0, 0);
-    ctx.restore();
-  } else {
-    // Khi choáng — dao rơi
-    ctx.save();
-    ctx.font = '14px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.rotate(0.5);   // dao nghiêng
-    ctx.fillText('🔪', s * 1.1, s * 0.8);
-    ctx.restore();
-  }
-
-  ctx.restore();
-}
-// Vẽ text trạng thái trên đầu killer
-function drawKillerStunText(px, py) {
-  let text = '';
-  let color = '';
-  const s = 24;
-
-  if (killer.stunState === 'STUNNED') {
-    text = '💥 CHÓI MẮT!';
-    color = '#ffff88';
-  } else if (killer.stunState === 'FLEEING') {
-    text = '😱 BỎ CHẠY!';
-    color = '#ff8800';
-  } else if (killer.stunState === 'SLOWED' || killer.lightCount >= 3) {
-    if (killer.lightCount >= 3) {
-      text = `🔦 CHẬM (${killer.lightCount} đèn)`;
-      color = '#ffdd66';
-    }
-  }
-
-  if (!text) return;
-
+  const knifeAngle = dir + Math.PI * 0.35;
+  const kx = Math.cos(knifeAngle) * s * 0.7;
+  const ky = Math.sin(knifeAngle) * s * 0.7;
   ctx.save();
-  ctx.font = 'bold 12px sans-serif';
+  ctx.translate(kx, ky);
+  ctx.rotate(knifeAngle + Math.PI / 2);
+  ctx.font = '14px sans-serif';
   ctx.textAlign = 'center';
-  ctx.textBaseline = 'bottom';
-
-  const textWidth = ctx.measureText(text).width;
-
-  // Nền
-  ctx.fillStyle = 'rgba(0,0,0,0.75)';
-  ctx.fillRect(px - textWidth/2 - 6, py - s/2 - 34, textWidth + 12, 18);
-
-  // Viền theo màu
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(px - textWidth/2 - 6, py - s/2 - 34, textWidth + 12, 18);
-
-  // Chữ
-  ctx.fillStyle = color;
-  ctx.fillText(text, px, py - s/2 - 20);
-
-  // Đếm ngược nếu STUNNED/FLEEING
-  if (killer.stunState === 'STUNNED' && killer.stunTimer > 0) {
-    const sec = Math.ceil(killer.stunTimer / 1000);
-    ctx.font = 'bold 10px sans-serif';
-    ctx.fillStyle = '#aaa';
-    ctx.fillText(`${sec}s`, px, py - s/2 - 38);
-  }
+  ctx.textBaseline = 'middle';
+  ctx.fillText('🔪', 0, 0);
+  ctx.restore();
 
   ctx.restore();
 }
-// ==================== DRAW: EQUIPPED ITEM (LOCAL) ====================
+
+// ==================== DRAW: EQUIPPED ITEM ====================
 function drawEquippedItem(px, py, dir) {
   if (!inventory.equipped) return;
   if (inventory.equipped === 'flashlight' && !inventory.flashlightOn) return;
@@ -1999,26 +1563,29 @@ function drawBreaker() {
   ctx.restore();
 }
 
-// ==================== FLASHLIGHT POLYGON (LOCAL) ====================
-function buildFlashlightPolygon(x, y, dir, offX, offY) {
-  const px = x + offX;
-  const py = y + offY;
+// ==================== FLASHLIGHT ====================
+function buildFlashlightPolygon(offX, offY) {
+  const px = gameState.myPos.x + offX;
+  const py = gameState.myPos.y + offY;
   const range = 10 * TILE;
   const halfAngle = Math.PI / 6;
   const rays = 32;
+  const dir = gameState.myPos.dir;
 
   const pts = [{ x: px, y: py }];
   for (let i = 0; i <= rays; i++) {
     const a = dir - halfAngle + (2 * halfAngle) * (i / rays);
-    const d = raycast(x, y, a, range);
+    const d = raycast(gameState.myPos.x, gameState.myPos.y, a, range);
     pts.push({ x: px + Math.cos(a) * d, y: py + Math.sin(a) * d });
   }
   return { pts, range, px, py };
 }
 
-// Vẽ spotlight khoét sáng (dùng cho local + remote)
-function carveFlashlightPolygon(dctx, x, y, dir, offX, offY, alphaMul = 1.0) {
-  const { pts, range, px, py } = buildFlashlightPolygon(x, y, dir, offX, offY);
+function carveFlashlight(dctx, offX, offY) {
+  if (!inventory.flashlightOn || inventory.equipped !== 'flashlight') return;
+  if (gameState.dead) return;
+
+  const { pts, range, px, py } = buildFlashlightPolygon(offX, offY);
 
   dctx.save();
   dctx.beginPath();
@@ -2028,11 +1595,11 @@ function carveFlashlightPolygon(dctx, x, y, dir, offX, offY, alphaMul = 1.0) {
   dctx.clip();
 
   const g = dctx.createRadialGradient(px, py, 0, px, py, range);
-  g.addColorStop(0,    `rgba(0,0,0,${1.0 * alphaMul})`);
-  g.addColorStop(0.25, `rgba(0,0,0,${0.95 * alphaMul})`);
-  g.addColorStop(0.55, `rgba(0,0,0,${0.75 * alphaMul})`);
-  g.addColorStop(0.8,  `rgba(0,0,0,${0.4 * alphaMul})`);
-  g.addColorStop(1,    `rgba(0,0,0,${0.05 * alphaMul})`);
+  g.addColorStop(0,    'rgba(0,0,0,1)');
+  g.addColorStop(0.25, 'rgba(0,0,0,0.95)');
+  g.addColorStop(0.55, 'rgba(0,0,0,0.75)');
+  g.addColorStop(0.8,  'rgba(0,0,0,0.4)');
+  g.addColorStop(1,    'rgba(0,0,0,0.05)');
   dctx.fillStyle = g;
   dctx.fillRect(0, 0, W, H);
 
@@ -2061,11 +1628,7 @@ function render() {
 
   // Items chưa nhặt
   for (const it of ITEMS) {
-    // Nếu mình đã nhặt → không vẽ
-    if (it.pickedByMe) continue;
-    // Nếu non-infinite và đã bị người khác nhặt → không vẽ
-    if (!it.infinite && it.picked) continue;
-
+    if (it.picked) continue;
     ctx.save();
     ctx.font = '22px sans-serif';
     ctx.textAlign = 'center';
@@ -2087,20 +1650,17 @@ function render() {
   ctx.lineWidth = 4;
   ctx.strokeRect(0, 0, WORLD_W, WORLD_H);
 
-// Killer
-if (killer.visible) {
-  drawKiller(killer.displayX, killer.displayY, killer.dir, killer.state);
-  // Vẽ text thông báo trên đầu killer khi bị ảnh hưởng
-  drawKillerStunText(killer.displayX, killer.displayY);
-}
+  // Killer
+  if (killer.visible) {
+    drawKiller(killer.displayX, killer.displayY, killer.dir, killer.state);
+  }
 
-  // Remote players + vật phẩm cầm tay
+  // Remote players (không vẽ nếu chết)
   for (const [id, p] of gameState.players.entries()) {
     if (p.dead) continue;
     const dx = p.displayX !== undefined ? p.displayX : p.x;
     const dy = p.displayY !== undefined ? p.displayY : p.y;
     drawRemotePlayer(dx, dy, p.dir, p.name || id);
-    drawRemoteEquippedItem(dx, dy, p.dir, p.equipped, p.flashlightOn);
   }
 
   // Local player (không vẽ nếu chết)
@@ -2179,20 +1739,8 @@ if (killer.visible) {
     dctx.fill();
   }
 
-  // Đèn pin LOCAL
-  if (inventory.flashlightOn && inventory.equipped === 'flashlight' && !gameState.dead) {
-    carveFlashlightPolygon(dctx, gameState.myPos.x, gameState.myPos.y, gameState.myPos.dir, offX, offY, 1.0);
-  }
-
-  // Đèn pin REMOTE — yếu hơn (0.7x)
-  for (const [id, p] of gameState.players.entries()) {
-    if (p.dead) continue;
-    if (p.equipped === 'flashlight' && p.flashlightOn) {
-      const dx = p.displayX !== undefined ? p.displayX : p.x;
-      const dy = p.displayY !== undefined ? p.displayY : p.y;
-      carveFlashlightPolygon(dctx, dx, dy, p.dir, offX, offY, 0.7);
-    }
-  }
+  // Đèn pin
+  carveFlashlight(dctx, offX, offY);
 
   ctx.drawImage(darkLayer, 0, 0);
 
@@ -2215,9 +1763,8 @@ if (killer.visible) {
     }
   }
 
-  // Đèn pin vàng LOCAL
   if (inventory.flashlightOn && inventory.equipped === 'flashlight' && !gameState.dead) {
-    const { pts, range, px, py } = buildFlashlightPolygon(gameState.myPos.x, gameState.myPos.y, gameState.myPos.dir, offX, offY);
+    const { pts, range, px, py } = buildFlashlightPolygon(offX, offY);
     ctx.save();
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
@@ -2231,29 +1778,6 @@ if (killer.visible) {
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
     ctx.restore();
-  }
-
-  // Đèn pin vàng REMOTE
-  for (const [id, p] of gameState.players.entries()) {
-    if (p.dead) continue;
-    if (p.equipped === 'flashlight' && p.flashlightOn) {
-      const dx = p.displayX !== undefined ? p.displayX : p.x;
-      const dy = p.displayY !== undefined ? p.displayY : p.y;
-      const { pts, range, px, py } = buildFlashlightPolygon(dx, dy, p.dir, offX, offY);
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, pts[0].y);
-      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-      ctx.closePath();
-      ctx.clip();
-      const g = ctx.createRadialGradient(px, py, 0, px, py, range);
-      g.addColorStop(0,   'rgba(255,245,200,0.35)');
-      g.addColorStop(0.4, 'rgba(255,240,180,0.18)');
-      g.addColorStop(1,   'rgba(255,240,180,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, W, H);
-      ctx.restore();
-    }
   }
   ctx.restore();
 
